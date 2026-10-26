@@ -17,6 +17,7 @@
   --bg:#0e131a; --ink:#e7ecf2; --muted:#93a0b0; --accent:#7398ff; --accent-soft:#1c2846; --live:#ff666c;
   --panel:#141b24; --line:#283241; --halo:#0b131c; color-scheme:dark}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.4 var(--f-body);overflow:hidden}
 .app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
@@ -64,12 +65,14 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 /* lecteur */
 .modal{position:fixed;inset:0;z-index:2000;background:rgba(5,8,12,.86);display:flex;align-items:center;justify-content:center;padding:16px}
 .player{width:min(960px,100%);display:flex;flex-direction:column;gap:10px}
+.close-top{align-self:flex-end;padding:8px 14px;border-radius:8px;border:1px solid #3a4757;background:#141b24;color:#fff;cursor:pointer;font-weight:600}
 .frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden}
 .frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .pinfo{color:#fff;display:flex;gap:10px;align-items:flex-start}
 .pinfo .txt{flex:1;min-width:0}
 .pinfo .t{font:600 16px var(--f-display)}
 .pinfo .m{font-size:12px;color:#b8c2cf;margin-top:2px}
+.ext{display:inline-block;margin-top:6px;font-size:12px;color:#9db6ff}
 .pbtn{width:40px;height:40px;border-radius:8px;border:1px solid #3a4757;background:#141b24;color:#fff;cursor:pointer;font-size:18px}
 /* marqueurs */
 .vpin{width:26px;height:26px;border-radius:50%;background:var(--live);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:grid;place-items:center;color:#fff;font-size:10px}
@@ -80,6 +83,7 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 .marker-cluster{background:color-mix(in srgb,var(--live) 30%,transparent);border-radius:50%}
 .marker-cluster div{background:var(--live);color:#fff;font:600 12px var(--f-mono);width:30px;height:30px;margin:5px;border-radius:50%;display:grid;place-items:center}
 .leaflet-container{font-family:var(--f-body)}
+@media (prefers-color-scheme:dark){.tiles{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}}
 @media (prefers-reduced-motion:reduce){.dot{animation:none}}
 </style>
 </head>
@@ -113,11 +117,11 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 </div>
 
 <div class="modal" id="modal" hidden>
-  <div class="player">
+  <div class="player"><button class="close-top" id="pClose2" aria-label="Fermer la vidéo">✕ Fermer</button>
     <div class="frame" id="frame"></div>
     <div class="pinfo">
       <button class="pbtn" id="pPrev" aria-label="Vidéo précédente">‹</button>
-      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div></div>
+      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div><a class="ext" id="pExt" target="_blank" rel="noopener">Ne se lance pas ? Ouvrir sur Dailymotion ↗</a></div>
       <button class="pbtn" id="pNext" aria-label="Vidéo suivante">›</button>
       <button class="pbtn" id="pClose" aria-label="Fermer">✕</button>
     </div>
@@ -169,8 +173,7 @@ function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
 /* ---------- carte ---------- */
 const dark=matchMedia("(prefers-color-scheme: dark)").matches;
 const map=L.map("map",{zoomControl:true,worldCopyJump:true}).setView([46.6,2.4],6);
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark?"dark_all":"light_all"}/{z}/{x}/{y}{r}.png`,{
-  maxZoom:19,subdomains:"abcd",attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,className:"tiles",attribution:'&copy; OpenStreetMap'}).addTo(map);
 const cityLayers={1:L.layerGroup(),2:L.layerGroup(),3:L.layerGroup()};
 const cityMarker=new Map();
 CITIES.forEach(c=>{
@@ -258,14 +261,15 @@ function renderVideos(){
 function play(i){
   if(i<0||i>=S.videos.length) return;
   S.idx=i; const x=S.videos[i];
-  $("frame").innerHTML=`<iframe src="https://www.dailymotion.com/embed/video/${encodeURIComponent(x.id)}?autoplay=1&queue-enable=false" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title=""></iframe>`;
+  $("frame").innerHTML=`<iframe src="https://geo.dailymotion.com/player.html?video=${encodeURIComponent(x.id)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title=""></iframe>`;
   $("pTitle").textContent=x.title;
+  $("pExt").href="https://www.dailymotion.com/video/"+encodeURIComponent(x.id);
   $("pMeta").textContent=`${x.channel} · ${new Date(x.ts).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`;
   $("pPrev").disabled=i===0; $("pNext").disabled=i===S.videos.length-1;
   $("modal").hidden=false;
 }
 function closePlayer(){$("modal").hidden=true;$("frame").innerHTML=""}
-$("pClose").onclick=closePlayer; $("pPrev").onclick=()=>play(S.idx-1); $("pNext").onclick=()=>play(S.idx+1);
+$("pClose").onclick=closePlayer; $("pClose2").onclick=closePlayer; $("pPrev").onclick=()=>play(S.idx-1); $("pNext").onclick=()=>play(S.idx+1);
 $("modal").onclick=e=>{if(e.target.id==="modal")closePlayer()};
 document.addEventListener("keydown",e=>{ if($("modal").hidden) return;
   if(e.key==="Escape")closePlayer(); if(e.key==="ArrowRight")play(S.idx+1); if(e.key==="ArrowLeft")play(S.idx-1)});
