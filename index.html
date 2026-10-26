@@ -201,11 +201,14 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 const LOCAL_MEDIA='"France 3"|"ici"|"Ouest-France"|"La Dépêche"|"Le Parisien"|"actu.fr"|"Nice-Matin"|"Sud Ouest"|"La Voix du Nord"|"Le Progrès"|"Le Dauphiné"|"BFM"|"Le Télégramme"|"La Provence"';
 const THEMES=[
   ["Tout",null],
+  ["Attentats",/attentat|terroris|antiterror|pnat|djihad|jihad|islamis|radicalis|fiché s|vigipirate|assaillant|attaque au couteau|attaque à l'arme|prise d'otages?|neutralisé|cellule de crise|minute de silence|hommage aux victimes/i],
   ["Faits divers",/faits? divers|police|gendarm|interpell|agress|meurtre|homicide|tué|poignard|cambriol|braquage|disparu|enquête|garde à vue|tribunal|procès|condamn|violences?/i],
   ["Météo",/météo|tempête|orage|inond|vigilance|neige|canicule|crue|intempéries|grêle|rafales|tornade/i],
   ["Manifs",/manif|grève|mobilisation|rassemblement|cortège|syndica|blocage|émeute|violences urbaines|black bloc/i],
   ["Accidents",/accident|collision|percut|carambolage|crash|renvers|sortie de route|chauffard/i],
   ["Incendies",/incendie|pompiers|flammes|brûl|explosion|feu de forêt|feux/i],
+  ["Politique",/gouvernement|ministre|assemblée|sénat|élection|municipales|présidentielle|député|macron|premier ministre|motion de censure|budget|rn |lfi|ps |républicains|bardella|le pen|mélenchon/i],
+  ["Justice",/tribunal|procès|juge|condamn|cour d'assises|parquet|mis en examen|garde à vue|avocat|verdict|prison|détention/i],
   ["Sport",/match|ligue 1|ligue 2|rugby|top 14|football|basket|handball|psg|olympique|stade|supporters|but |victoire|défaite/i]
 ];
 const $=id=>document.getElementById(id);
