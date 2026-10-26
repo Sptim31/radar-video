@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Radar Vidéo France</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#eef1f4; --ink:#17202b; --muted:#5b6878; --accent:#1f4fd1; --accent-soft:#e3eafc; --live:#e0424a;
+  --panel:#ffffff; --line:#d5dce5; --halo:#ffffff; color-scheme:light;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif; --f-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e131a; --ink:#e7ecf2; --muted:#93a0b0; --accent:#7398ff; --accent-soft:#1c2846; --live:#ff666c;
+  --panel:#141b24; --line:#283241; --halo:#0b131c; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.4 var(--f-body);overflow:hidden}
+.app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);z-index:2}
+.brand{display:flex;align-items:center;gap:8px}
+.brand h1{font:800 19px var(--f-display);margin:0;letter-spacing:-.01em;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--live);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--live) 60%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+form.search{flex:1 1 220px;display:flex;gap:6px;min-width:0}
+input,button{font:inherit}
+form.search input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.btn{padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+#map{flex:1 1 50%;min-height:240px;background:var(--bg)}
+aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top:1px solid var(--line);padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:900px){main{flex-direction:row}#map{flex:1}aside{flex:0 0 420px;border-top:0;border-left:1px solid var(--line)}}
+.eyebrow{font:500 11px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.place{font:800 26px/1.05 var(--f-display);margin:4px 0 12px;text-wrap:balance}
+.datebox{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.datebox .day{flex:1;min-width:0}
+.long{font:600 16px var(--f-display);text-transform:capitalize}
+.rel{font:12px var(--f-mono);color:var(--muted)}
+.datebox input{font:12px var(--f-mono);padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);max-width:140px}
+.nav{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.nav:disabled{opacity:.35;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.toggle{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--muted)}
+.status{margin:14px 0 8px;font:12px var(--f-mono);color:var(--muted)}
+.status.err{color:var(--live)}
+.list{display:flex;flex-direction:column;gap:10px}
+.vid{display:grid;grid-template-columns:132px 1fr;gap:10px;padding:0;border:0;background:none;color:var(--ink);text-align:left;cursor:pointer;border-radius:8px}
+.vid:hover .t{color:var(--accent)}
+.thumb{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:var(--line);max-width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.8);color:#fff;font:11px var(--f-mono);padding:1px 4px;border-radius:3px}
+.thumb .lv{position:absolute;left:4px;top:4px;background:var(--live);color:#fff;font:600 10px var(--f-mono);padding:1px 5px;border-radius:3px}
+.vid .t{font-weight:600;font-size:13.5px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.vid .m{font-size:12px;color:var(--muted);margin-top:3px}
+.vid .geo{color:var(--accent)}
+.empty{padding:24px 12px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
+/* lecteur */
+.modal{position:fixed;inset:0;z-index:2000;background:rgba(5,8,12,.86);display:flex;align-items:center;justify-content:center;padding:16px}
+.player{width:min(960px,100%);display:flex;flex-direction:column;gap:10px}
+.frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.pinfo{color:#fff;display:flex;gap:10px;align-items:flex-start}
+.pinfo .txt{flex:1;min-width:0}
+.pinfo .t{font:600 16px var(--f-display)}
+.pinfo .m{font-size:12px;color:#b8c2cf;margin-top:2px}
+.pbtn{width:40px;height:40px;border-radius:8px;border:1px solid #3a4757;background:#141b24;color:#fff;cursor:pointer;font-size:18px}
+/* marqueurs */
+.vpin{width:26px;height:26px;border-radius:50%;background:var(--live);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:grid;place-items:center;color:#fff;font-size:10px}
+.cpin{background:transparent;border:0}
+.cpin span{display:block;border-radius:50%;background:var(--accent);border:2px solid var(--halo)}
+.clabel{background:none;border:0;box-shadow:none;font:600 12px var(--f-body);color:var(--ink);text-shadow:0 0 3px var(--halo),0 0 3px var(--halo)}
+.clabel::before{display:none}
+.marker-cluster{background:color-mix(in srgb,var(--live) 30%,transparent);border-radius:50%}
+.marker-cluster div{background:var(--live);color:#fff;font:600 12px var(--f-mono);width:30px;height:30px;margin:5px;border-radius:50%;display:grid;place-items:center}
+.leaflet-container{font-family:var(--f-body)}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><span class="dot"></span><h1>Radar Vidéo France</h1></div>
+    <form class="search" id="searchForm" autocomplete="off">
+      <input id="q" list="placesList" placeholder="Ville, département, sujet…" aria-label="Chercher">
+      <datalist id="placesList"></datalist>
+      <button class="btn primary" type="submit">Aller</button>
+    </form>
+  </header>
+  <main>
+    <div id="map"></div>
+    <aside>
+      <div class="eyebrow" id="kind">Zone visible</div>
+      <div class="place" id="placeName">France</div>
+      <div class="datebox">
+        <button class="nav" id="prev" aria-label="Jour précédent">‹</button>
+        <div class="day"><div class="long" id="longDate"></div><div class="rel" id="relDate"></div></div>
+        <button class="nav" id="next" aria-label="Jour suivant">›</button>
+        <input type="date" id="dateInput" aria-label="Choisir une date">
+      </div>
+      <div class="row" id="themes"></div>
+      <label class="toggle"><input type="checkbox" id="auto" checked> Charger les vidéos quand je déplace la carte</label>
+      <div class="status" id="status"></div>
+      <div class="list" id="list"></div>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="player">
+    <div class="frame" id="frame"></div>
+    <div class="pinfo">
+      <button class="pbtn" id="pPrev" aria-label="Vidéo précédente">‹</button>
+      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div></div>
+      <button class="pbtn" id="pNext" aria-label="Vidéo suivante">›</button>
+      <button class="pbtn" id="pClose" aria-label="Fermer">✕</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+// [nom, lat, lon, palier]
+const CITIES = [
+["Paris",48.857,2.352,1],["Marseille",43.296,5.370,1],["Lyon",45.764,4.835,1],["Toulouse",43.605,1.444,1],["Nice",43.710,7.262,1],
+["Nantes",47.218,-1.554,1],["Montpellier",43.611,3.877,1],["Strasbourg",48.573,7.752,1],["Bordeaux",44.838,-0.579,1],["Lille",50.629,3.057,1],
+["Rennes",48.117,-1.678,1],["Reims",49.258,4.032,1],["Toulon",43.124,5.928,1],["Saint-Étienne",45.439,4.387,1],["Le Havre",49.494,0.108,1],
+["Grenoble",45.188,5.724,1],["Dijon",47.322,5.041,1],["Angers",47.473,-0.554,1],["Nîmes",43.837,4.360,1],["Clermont-Ferrand",45.778,3.087,1],
+["Brest",48.390,-4.486,1],["Tours",47.394,0.684,1],["Amiens",49.894,2.296,1],["Limoges",45.834,1.261,1],["Metz",49.119,6.176,1],
+["Perpignan",42.699,2.895,1],["Orléans",47.903,1.909,1],["Rouen",49.443,1.099,1],["Caen",49.182,-0.371,1],["Ajaccio",41.919,8.737,1],
+["Le Mans",48.006,0.199,2],["Aix-en-Provence",43.529,5.447,2],["Besançon",47.238,6.024,2],["Mulhouse",47.750,7.336,2],["Nancy",48.692,6.184,2],
+["Avignon",43.949,4.806,2],["Poitiers",46.580,0.340,2],["Pau",43.295,-0.370,2],["La Rochelle",46.160,-1.151,2],["Calais",50.951,1.858,2],
+["Cannes",43.552,7.017,2],["Béziers",43.344,3.215,2],["Bourges",47.081,2.398,2],["Saint-Nazaire",47.273,-2.214,2],["Colmar",48.079,7.358,2],
+["Valence",44.933,4.892,2],["Annecy",45.899,6.129,2],["Bayonne",43.493,-1.475,2],["Dunkerque",51.034,2.377,2],["Troyes",48.297,4.074,2],
+["Chambéry",45.566,5.918,2],["Lorient",47.748,-3.370,2],["Quimper",47.996,-4.097,2],["Niort",46.323,-0.459,2],["Bastia",42.697,9.450,2],
+["Saint-Denis",48.936,2.358,2],["Versailles",48.804,2.130,2],["Vannes",47.658,-2.760,2],["Saint-Malo",48.649,-2.008,2],["Angoulême",45.648,0.156,2],
+["Cherbourg",49.639,-1.622,2],["Arles",43.677,4.631,2],["Lens",50.432,2.832,2],["Montauban",44.018,1.355,2],["Saint-Brieuc",48.514,-2.765,2],
+["Chartres",48.446,1.489,3],["Laval",48.073,-0.770,3],["Blois",47.586,1.335,3],["Châteauroux",46.811,1.691,3],["Agen",44.203,0.616,3],
+["Périgueux",45.184,0.722,3],["Brive-la-Gaillarde",45.159,1.533,3],["Carcassonne",43.213,2.353,3],["Fréjus",43.433,6.737,3],["Gap",44.559,6.079,3],
+["Boulogne-sur-Mer",50.726,1.614,3],["Charleville-Mézières",49.773,4.720,3],["Épinal",48.172,6.449,3],["Belfort",47.640,6.863,3],["Mâcon",46.307,4.828,3],
+["Nevers",46.990,3.159,3],["Auxerre",47.798,3.570,3],["Beauvais",49.430,2.081,3],["Évreux",49.027,1.151,3],["Alençon",48.433,0.093,3],
+["Saint-Lô",49.116,-1.090,3],["La Roche-sur-Yon",46.670,-1.427,3],["Cholet",47.060,-0.879,3],["Rodez",44.350,2.575,3],["Albi",43.929,2.148,3],
+["Tarbes",43.233,0.078,3],["Mont-de-Marsan",43.890,-0.500,3],["Aurillac",44.926,2.444,3],["Le Puy-en-Velay",45.043,3.885,3],["Vichy",46.128,3.426,3],
+["Guéret",46.171,1.871,3],["Tulle",45.267,1.772,3],["Cahors",44.448,1.441,3],["Foix",42.965,1.605,3],["Auch",43.646,0.586,3],
+["Mende",44.518,3.500,3],["Privas",44.735,4.599,3],["Digne-les-Bains",44.092,6.236,3],["Bourg-en-Bresse",46.205,5.226,3],["Lons-le-Saunier",46.675,5.555,3],
+["Vesoul",47.622,6.155,3],["Chaumont",48.111,5.139,3],["Bar-le-Duc",48.772,5.161,3],["Châlons-en-Champagne",48.957,4.364,3],["Laon",49.564,3.624,3],
+["Saint-Quentin",49.847,3.287,3],["Arras",50.291,2.778,3],["Melun",48.540,2.656,3],["Évry",48.630,2.441,3],["Cergy",49.036,2.065,3],
+["Montluçon",46.340,2.603,3],["Sète",43.403,3.697,3],["Biarritz",43.483,-1.559,3],["Draguignan",43.536,6.466,3],["Menton",43.775,7.497,3],
+["Porto-Vecchio",41.591,9.280,3],["Calvi",42.567,8.757,3],["Roubaix",50.691,3.174,3],["Créteil",48.790,2.455,3],["Nanterre",48.892,2.207,3],
+["Bobigny",48.909,2.440,3],["Villeurbanne",45.771,4.880,3],["Vénissieux",45.697,4.886,3],["Marignane",43.416,5.216,3],["Martigues",43.405,5.054,3]
+];
+const THEMES=[["Tout",""],["Actualité","actualité"],["Faits divers","faits divers"],["Météo","intempéries"],["Manifs","manifestation"],["Accidents","accident"],["Sport","sport"]];
+const AUTO_ZOOM=9; // zoom à partir duquel les vidéos de la zone se chargent toutes seules
+
+/* ---------- état ---------- */
+const S={date:today(),theme:0,target:{type:"zone"},videos:[],idx:-1,reqId:0};
+function today(){return iso(new Date())}
+function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function parse(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return iso(d)}
+function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
+
+/* ---------- carte ---------- */
+const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+const map=L.map("map",{zoomControl:true,worldCopyJump:true}).setView([46.6,2.4],6);
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark?"dark_all":"light_all"}/{z}/{x}/{y}{r}.png`,{
+  maxZoom:19,subdomains:"abcd",attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+
+const cityLayers={1:L.layerGroup(),2:L.layerGroup(),3:L.layerGroup()};
+CITIES.forEach(c=>{
+  const sz=c[3]===1?12:9;
+  const m=L.marker([c[1],c[2]],{icon:L.divIcon({className:"cpin",html:`<span style="width:${sz}px;height:${sz}px"></span>`,iconSize:[sz,sz]}),title:c[0]})
+    .bindTooltip(c[0],{permanent:true,direction:"right",className:"clabel",offset:[6,0]})
+    .on("click",()=>{selectCity(c)});
+  cityLayers[c[3]].addLayer(m);
+});
+function updateCityLayers(){
+  const z=map.getZoom();
+  [[1,5],[2,7],[3,8]].forEach(([t,minZ])=>{ if(z>=minZ) cityLayers[t].addTo(map); else map.removeLayer(cityLayers[t]); });
+}
+const vidLayer=L.markerClusterGroup({showCoverageOnHover:false,maxClusterRadius:40}).addTo(map);
+
+/* ---------- panneau ---------- */
+const $=id=>document.getElementById(id);
+THEMES.forEach(([lab],i)=>{const b=document.createElement("button");b.className="chip";b.textContent=lab;b.id="th"+i;
+  b.onclick=()=>{S.theme=i;renderHeader();load()};$("themes").appendChild(b)});
+$("dateInput").max=today();
+$("dateInput").onchange=()=>{const v=$("dateInput").value; if(v){S.date=v>today()?today():v;renderHeader();load()}};
+$("prev").onclick=()=>{S.date=addDays(S.date,-1);renderHeader();load()};
+$("next").onclick=()=>{if(S.date<today()){S.date=addDays(S.date,1);renderHeader();load()}};
+
+function renderHeader(){
+  const t=S.target;
+  $("kind").textContent=t.type==="city"?"Ville":t.type==="text"?"Recherche":"Zone visible";
+  $("placeName").textContent=t.type==="zone"?zoneName():t.name;
+  const ago=daysAgo(S.date);
+  $("longDate").textContent=parse(S.date).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  $("relDate").textContent=ago===0?"aujourd'hui":ago===1?"hier":"il y a "+ago+" jours";
+  $("dateInput").value=S.date; $("next").disabled=ago===0;
+  THEMES.forEach((_,i)=>$("th"+i).setAttribute("aria-pressed",i===S.theme));
+}
+function zoneName(){
+  const c=map.getCenter(); let best=null,bd=1e9;
+  CITIES.forEach(x=>{const d=map.distance(c,[x[1],x[2]]); if(d<bd){bd=d;best=x}});
+  return map.getZoom()<AUTO_ZOOM?"France":(bd<40000?"Autour de "+best[0]:"Zone visible");
+}
+function viewRadiusKm(){const b=map.getBounds();return Math.min(1000,Math.max(2,map.distance(b.getNorthEast(),b.getSouthWest())/2000))}
+
+function setStatus(t,err){const s=$("status");s.textContent=t;s.classList.toggle("err",!!err)}
+
+/* ---------- chargement ---------- */
+async function load(){
+  const t=S.target, theme=THEMES[S.theme][1];
+  if(t.type==="zone" && map.getZoom()<AUTO_ZOOM){
+    vidLayer.clearLayers(); $("list").innerHTML=""; S.videos=[];
+    $("list").innerHTML=`<div class="empty">Zoome sur une zone (ou touche une ville) pour voir ses vidéos du jour.</div>`;
+    setStatus(""); return;
+  }
+  const p=new URLSearchParams({date:S.date});
+  if(t.type==="zone"){const c=map.getCenter();p.set("mode","geo");p.set("lat",c.lat);p.set("lng",c.lng);p.set("radius",viewRadiusKm());if(theme)p.set("q",theme)}
+  else{p.set("mode","text");p.set("q",[t.name,theme].filter(Boolean).join(" "))}
+  const id=++S.reqId; setStatus("Chargement des vidéos…");
+  try{
+    const r=await fetch("/api/videos?"+p); const j=await r.json();
+    if(id!==S.reqId) return;
+    if(!r.ok) throw new Error(j.error||"Erreur");
+    S.videos=j.videos; renderVideos();
+  }catch(e){ if(id===S.reqId){setStatus(e.message,true)} }
+}
+
+function fmtTime(s){return new Date(s).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
+function fmtViews(n){return n>=1e6?(n/1e6).toFixed(1)+" M vues":n>=1e3?Math.round(n/1e3)+" k vues":n+" vues"}
+
+function renderVideos(){
+  const list=$("list"); list.innerHTML=""; vidLayer.clearLayers();
+  const v=S.videos, geo=v.filter(x=>x.lat!=null).length;
+  setStatus(v.length?`${v.length} vidéo${v.length>1?"s":""} · ${geo} placée${geo>1?"s":""} sur la carte`:"");
+  if(!v.length){list.innerHTML=`<div class="empty">Aucune vidéo trouvée pour ce lieu ce jour-là. Essaie un autre sujet, une zone plus large ou la veille.</div>`;return}
+  v.forEach((x,i)=>{
+    const b=document.createElement("button"); b.className="vid";
+    b.innerHTML=`<div class="thumb"><img loading="lazy" alt=""></div><div><div class="t"></div><div class="m"></div></div>`;
+    b.querySelector("img").src=x.thumb;
+    if(x.duration&&!x.live) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="dur">${x.duration}</span>`);
+    if(x.live) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="lv">EN DIRECT</span>`);
+    b.querySelector(".t").textContent=x.title;
+    b.querySelector(".m").textContent=`${x.channel} · ${fmtTime(x.publishedAt)} · ${fmtViews(x.views)}`;
+    if(x.lat!=null) b.querySelector(".m").insertAdjacentHTML("beforeend",` · <span class="geo">◉ carte</span>`);
+    b.onclick=()=>play(i);
+    list.appendChild(b);
+    if(x.lat!=null){
+      L.marker([x.lat,x.lng],{icon:L.divIcon({className:"",html:'<div class="vpin">▶</div>',iconSize:[26,26]}),title:x.title})
+        .on("click",()=>play(i)).addTo(vidLayer);
+    }
+  });
+}
+
+/* ---------- lecteur intégré ---------- */
+function play(i){
+  if(i<0||i>=S.videos.length) return;
+  S.idx=i; const x=S.videos[i];
+  $("frame").innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(x.id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title=""></iframe>`;
+  $("pTitle").textContent=x.title;
+  $("pMeta").textContent=`${x.channel} · ${new Date(x.publishedAt).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`;
+  $("pPrev").disabled=i===0; $("pNext").disabled=i===S.videos.length-1;
+  $("modal").hidden=false;
+  if(x.lat!=null) map.setView([x.lat,x.lng],Math.max(map.getZoom(),12),{animate:false});
+}
+function closePlayer(){$("modal").hidden=true;$("frame").innerHTML=""}
+$("pClose").onclick=closePlayer;
+$("pPrev").onclick=()=>play(S.idx-1);
+$("pNext").onclick=()=>play(S.idx+1);
+$("modal").onclick=e=>{if(e.target.id==="modal")closePlayer()};
+document.addEventListener("keydown",e=>{ if($("modal").hidden) return;
+  if(e.key==="Escape")closePlayer(); if(e.key==="ArrowRight")play(S.idx+1); if(e.key==="ArrowLeft")play(S.idx-1)});
+
+/* ---------- sélection ---------- */
+function selectCity(c){
+  S.target={type:"city",name:c[0]};
+  map.setView([c[1],c[2]],Math.max(map.getZoom(),11));
+  renderHeader(); load();
+}
+let moveTimer=null, ignoreMove=false;
+map.on("zoomend",updateCityLayers);
+map.on("moveend",()=>{
+  if(S.target.type!=="zone"){ return; }
+  renderHeader();
+  if(!$("auto").checked) return;
+  clearTimeout(moveTimer); moveTimer=setTimeout(load,900);
+});
+// glisser la carte après avoir choisi une ville -> revenir au mode "zone"
+map.on("dragstart",()=>{ if(S.target.type!=="zone"){S.target={type:"zone"};} });
+$("auto").onchange=()=>{ if($("auto").checked){S.target={type:"zone"};renderHeader();load()} };
+
+/* ---------- recherche ---------- */
+const norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+CITIES.map(c=>c[0]).sort((a,b)=>a.localeCompare(b,"fr")).forEach(n=>{const o=document.createElement("option");o.value=n;$("placesList").appendChild(o)});
+$("searchForm").onsubmit=e=>{
+  e.preventDefault(); const raw=$("q").value.trim(); if(!raw) return;
+  const c=CITIES.find(c=>norm(c[0])===norm(raw));
+  if(c) return selectCity(c);
+  S.target={type:"text",name:raw}; renderHeader(); load();
+};
+
+/* ---------- démarrage ---------- */
+updateCityLayers(); renderHeader(); load();
+fetch("/api/status").then(r=>r.json()).then(j=>{ if(!j.key) setStatus("Aucune clé API YouTube : ajoute YT_API_KEY dans .env puis relance le serveur.",true) }).catch(()=>{});
+</script>
+</body>
+</html>
