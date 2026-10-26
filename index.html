@@ -77,12 +77,13 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 .tctl{display:flex;gap:6px;flex:none}
 .tbtn{background:none;border:1px solid #3a2226;color:#ff6b6b;font:600 11px var(--f-mono);padding:5px 8px;border-radius:5px;cursor:pointer}
 .tbtn[aria-pressed="true"]{background:#ff3b3b;border-color:#ff3b3b;color:#fff}
-.thead{padding:14px 0 8px;border-left:3px solid #ff3b3b;padding-left:14px;margin-top:10px}
+.thead{padding:8px 0 6px;border-left:3px solid #ff3b3b;padding-left:14px;margin-top:10px}
 .thead h2{margin:0;font:800 clamp(24px,4vw,40px)/1 var(--f-display);text-transform:uppercase;letter-spacing:-.01em}
 .tmeta{font:11px var(--f-mono);color:#8b93a1;margin-top:6px}
-.tstage{flex:1;min-height:0;display:flex;align-items:center;gap:10px;padding:8px 0}
-.tframe{flex:1;min-width:0;height:100%;display:flex;align-items:center;justify-content:center}
-.tframe iframe,#ytp{width:100%;max-height:100%;aspect-ratio:16/9;border:0;background:#000}
+.tstage{flex:1;min-height:0;display:flex;align-items:stretch;gap:10px;padding:6px 0}
+.tstage .tarrow{align-self:center}
+.tframe{flex:1;min-width:0;height:100%;container-type:size;display:flex;align-items:center;justify-content:center}
+.tframe iframe,.tframe #ytp{width:min(100cqw,calc(100cqh * var(--ar,1.7778)));height:min(100cqh,calc(100cqw / var(--ar,1.7778)));border:0;background:#000;border-radius:6px}
 .tarrow{flex:none;width:36px;height:36px;border-radius:50%;border:1px solid #2a303a;background:#111419;color:#fff;font-size:18px;cursor:pointer}
 .tarrow:disabled{opacity:.3}
 .tcap{font:600 clamp(15px,1.8vw,20px)/1.3 var(--f-body);text-align:center;max-width:70ch;margin:0 auto;padding:4px 0 10px;text-wrap:balance}
@@ -225,7 +226,7 @@ function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
 /* ---------- stockage ---------- */
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},
   set(k,v){const w=()=>localStorage.setItem(k,JSON.stringify(v));try{w()}catch{try{Object.keys(localStorage).filter(x=>/^rv\d*:\d{4}-/.test(x)&&x!==k).forEach(x=>localStorage.removeItem(x));w()}catch{}}}};
-try{Object.keys(localStorage).filter(x=>/^rv[234]?:\d{4}-/.test(x)).forEach(x=>localStorage.removeItem(x))}catch{}
+try{Object.keys(localStorage).filter(x=>/^rv[2345]?:\d{4}-/.test(x)).forEach(x=>localStorage.removeItem(x))}catch{}
 const DEFAULT_KEY="AIzaSyDAloESeGf9nw0KKT_u_05knDop5uTksbM";
 function getKey(){try{return localStorage.getItem("rv:key")||DEFAULT_KEY}catch{return DEFAULT_KEY}}
 
@@ -347,7 +348,7 @@ async function channels(){
   const seen=new Set(); return Object.values(m).filter(c=>c&&!seen.has(c.u)&&seen.add(c.u));
 }
 async function fetchDay(){
-  const key=`rv5:${S.date}`, hit=store.get(key), fresh=daysAgo(S.date)===0?15*60e3:7*864e5;
+  const key=`rv6:${S.date}`, hit=store.get(key), fresh=daysAgo(S.date)===0?15*60e3:7*864e5;
   if(hit && Date.now()-hit.t<fresh) return hit.v;
   const chans=await channels(); const start=+parse(S.date), end=+parse(addDays(S.date,1)); const maxPages=3+Math.min(daysAgo(S.date),7)*2;
   const seen=new Map(); let done=0;
@@ -363,9 +364,10 @@ async function fetchDay(){
     setStatus(`Chargement… ${++done}/${chans.length} médias`) });
   const ids=[...seen.keys()];
   await pool(Array.from({length:Math.ceil(ids.length/50)},(_,k)=>ids.slice(k*50,k*50+50)),4,async chunk=>{
-    try{const j=await api("videos",{part:"snippet,recordingDetails,contentDetails",id:chunk.join(",")});
+    try{const j=await api("videos",{part:"snippet,recordingDetails,contentDetails,player",maxHeight:"360",id:chunk.join(",")});
       (j.items||[]).forEach(it=>{const v=seen.get(it.id); if(!v) return; const sn=it.snippet||{};
         v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.live=sn.liveBroadcastContent==="live"; v.dur=isoDur((it.contentDetails||{}).duration);
+        const pl=it.player||{}; if(pl.embedWidth&&pl.embedHeight) v.ar=+pl.embedWidth/+pl.embedHeight;
         const loc=it.recordingDetails&&it.recordingDetails.location; if(loc&&loc.latitude!=null){v.lat=loc.latitude;v.lng=loc.longitude}})}catch{} });
   const v=[...seen.values()].filter(x=>!JUNK.test(x.title)).sort((a,b)=>b.ts-a.ts);
   store.set(key,{t:Date.now(),v}); return v;
@@ -524,6 +526,8 @@ function go(k){
   $("tPrev").disabled=k===0; $("tNext").disabled=k===T.list.length-1;
   document.querySelectorAll("#tStrip button").forEach((b,n)=>b.setAttribute("aria-current",n===k));
   const cur=$("tStrip").children[k]; if(cur) cur.scrollIntoView({block:"nearest",inline:"center",behavior:"smooth"});
+  const ar=v.ar||((/#shorts?\b/i.test(v.title)||(v.dur&&v.dur<=60))?9/16:16/9);
+  document.querySelector(".tframe").style.setProperty("--ar",ar);
   loadVideo(v.id);
 }
 function loadVideo(id){
