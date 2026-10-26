@@ -182,7 +182,8 @@ function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
 
 /* ---------- stockage ---------- */
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-function getKey(){try{return localStorage.getItem("rv:key")||""}catch{return ""}}
+const DEFAULT_KEY="AIzaSyDAloESeGf9nw0KKT_u_05knDop5uTksbM";
+function getKey(){try{return localStorage.getItem("rv:key")||DEFAULT_KEY}catch{return DEFAULT_KEY}}
 
 /* ---------- carte ---------- */
 const map=L.map("map",{zoomControl:true,worldCopyJump:true}).setView([46.6,2.4],6);
