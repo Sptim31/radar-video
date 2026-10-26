@@ -255,7 +255,7 @@ function decode(s){const t=document.createElement("textarea");t.innerHTML=s;retu
 
 /* ---------- YouTube ---------- */
 async function yt(params){
-  const p=new URLSearchParams({part:"snippet",type:"video",maxResults:"50",order:"date",regionCode:"FR",relevanceLanguage:"fr",safeSearch:"moderate",key:getKey(),...params});
+  const p=new URLSearchParams({part:"snippet",type:"video",maxResults:"50",order:"date",regionCode:"FR",relevanceLanguage:"fr",safeSearch:"moderate",videoCategoryId:THEMES[S.theme][0]==="Sport"?"17":"25",key:getKey(),...params});
   const r=await fetch("https://www.googleapis.com/youtube/v3/search?"+p); const j=await r.json();
   if(j.error){const reason=(j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason)||"";
     const e=new Error(reason.includes("quota")||reason==="dailyLimitExceeded"?"Quota YouTube du jour épuisé (il revient vers 9h).":
@@ -267,6 +267,12 @@ function dayRange(){const a=parse(S.date), b=parse(addDays(S.date,1));return {pu
 function toVideo(it){const sn=it.snippet;return {id:it.id.videoId,title:decode(sn.title),desc:decode(sn.description||""),channel:decode(sn.channelTitle),
   ts:Date.parse(sn.publishedAt),thumb:(sn.thumbnails.medium||sn.thumbnails.default).url,live:sn.liveBroadcastContent==="live",city:-1}}
 const FR_WORDS=new Set("le la les des du un une est et à au aux pour sur dans avec qui ce cette après contre par pas plus été sont mais leur nous vous ont deux ans hier soir matin".split(" "));
+const JUNK=/\b(minecraft|fortnite|roblox|gta|call of duty|warzone|valorant|league of legends|pokemon|pokémon|gameplay|let'?s play|jeu vidéo|jeux vidéo|gaming|quiz|tuto|tutoriel|formation|ssiap|unboxing|asmr|prank|réaction|react|horoscope|tirage|voyance|recette|vlog|clip officiel|official video|karaoké|lyrics|paroles|sims)\b/i;
+function isNews(v){
+  if(v.cat && v.cat!=="25" && v.cat!=="17") return false;
+  if(JUNK.test(v.title)||JUNK.test(v.channel)) return false;
+  return true;
+}
 function isFrench(v){
   const t=v.title+" "+v.desc.slice(0,300);
   if(/[\u0400-\u04FF\u0590-\u06FF\u0900-\u0DFF\u0E00-\u0E7F\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(v.title)) return false;
@@ -308,10 +314,10 @@ async function fetchSet(cacheKey,queries,pages){
     const p=new URLSearchParams({part:"snippet,recordingDetails,contentDetails",id:ids.slice(i,i+50).join(","),key:getKey()});
     try{const j=await (await fetch("https://www.googleapis.com/youtube/v3/videos?"+p)).json();
       (j.items||[]).forEach(it=>{const v=seen.get(it.id); if(!v) return; const sn=it.snippet||{};
-        v.desc=decode(sn.description||v.desc); v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.lang=sn.defaultAudioLanguage||sn.defaultLanguage||""; v.dur=isoDur((it.contentDetails||{}).duration);
+        v.desc=decode(sn.description||v.desc); v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.lang=sn.defaultAudioLanguage||sn.defaultLanguage||""; v.dur=isoDur((it.contentDetails||{}).duration); v.cat=sn.categoryId||"";
         const loc=it.recordingDetails&&it.recordingDetails.location; if(loc&&loc.latitude!=null){v.lat=loc.latitude;v.lng=loc.longitude}})}catch{}
   }
-  const v=[...seen.values()].sort((a,b)=>b.ts-a.ts).map(x=>({...x,desc:x.desc.slice(0,600)})).filter(isFrench);
+  const v=[...seen.values()].sort((a,b)=>b.ts-a.ts).map(x=>({...x,desc:x.desc.slice(0,600)})).filter(v=>isFrench(v)&&isNews(v));
   store.set(cacheKey,{t:Date.now(),v}); return v;
 }
 
@@ -322,7 +328,7 @@ async function load(){
   const [,queries,pages]=THEMES[S.theme]; const id=++S.req;
   setStatus("Chargement des vidéos du jour…"); $("list").innerHTML=""; $("actions").innerHTML="";
   try{
-    const v=await fetchSet(`rv3:${S.date}:${S.theme}`,queries,pages);
+    const v=await fetchSet(`rv4:${S.date}:${S.theme}`,queries,pages);
     if(id!==S.req) return;
     S.videos=v.map(locate); drawBubbles(); show(null);
   }catch(e){ if(id===S.req){ setStatus(e.message,true); if(e.keyErr) $("keyCard").hidden=false } }
@@ -414,7 +420,7 @@ function renderList(list){
 async function moreForCity(ci){
   const c=COMMUNES[ci]; const id=++S.req; setStatus("Recherche de vidéos à "+c[0]+"…",false);
   try{
-    const extra=await fetchSet(`rv3:${S.date}:city:${norm(c[0])}`,[c[0]],1);
+    const extra=await fetchSet(`rv4:${S.date}:city:${norm(c[0])}`,[c[0]],1);
     if(id!==S.req) return;
     const have=new Set(S.videos.map(v=>v.id));
     extra.forEach(v=>{ if(have.has(v.id)) return; locate(v); if(v.city<0) v.city=ci; S.videos.push(v) });
@@ -504,7 +510,7 @@ $("searchForm").onsubmit=async e=>{
   const ci=IDX.get(norm(raw)); if(ci!==undefined) return selectCity(ci,true);
   if(!getKey()){ $("keyCard").hidden=false; return }
   const id=++S.req; S.text=raw; S.city=null; renderHeader(); setStatus("Recherche…"); $("actions").innerHTML="";
-  try{ const v=await fetchSet(`rv3:${S.date}:q:${norm(raw)}`,[raw],1); if(id!==S.req) return;
+  try{ const v=await fetchSet(`rv4:${S.date}:q:${norm(raw)}`,[raw],1); if(id!==S.req) return;
     S.shown=v.map(locate); renderList(S.shown); setStatus(`${v.length} vidéos pour « ${raw} »`);
     const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;load()};$("actions").append(a);
   }catch(err){ if(id===S.req) setStatus(err.message,true) }
