@@ -208,13 +208,13 @@ function renderHeader(){
 function setStatus(t,err){const s=$("status");s.textContent=t;s.classList.toggle("err",!!err)}
 
 /* ---------- vidéos (API publique Dailymotion, sans clé) ---------- */
-const FIELDS="id,title,created_time,duration,owner.screenname,views_total,thumbnail_360_url,onair";
+const FIELDS="id,title,created_time,duration,owner.screenname,views_total,thumbnail_360_url,onair,allow_embed,embed_url";
 async function dmSearch(q,fromTs,toTs){
   const p=new URLSearchParams({search:q,sort:"recent",limit:"50",fields:FIELDS,created_after:fromTs,created_before:toTs});
   const r=await fetch("https://api.dailymotion.com/videos?"+p);
   const j=await r.json();
   if(j.error) throw new Error(j.error.message||"Erreur Dailymotion");
-  return (j.list||[]).map(v=>({id:v.id,title:v.title,channel:v["owner.screenname"]||"",ts:v.created_time*1000,
+  return (j.list||[]).filter(v=>v.allow_embed!==false).map(v=>({id:v.id,embed:v.embed_url||("https://www.dailymotion.com/embed/video/"+v.id),title:v.title,channel:v["owner.screenname"]||"",ts:v.created_time*1000,
     thumb:v.thumbnail_360_url,duration:fmtDur(v.duration),views:v.views_total||0,live:!!v.onair}));
 }
 function fmtDur(s){if(!s)return"";const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`:`${m}:${String(x).padStart(2,"0")}`}
@@ -261,7 +261,7 @@ function renderVideos(){
 function play(i){
   if(i<0||i>=S.videos.length) return;
   S.idx=i; const x=S.videos[i];
-  $("frame").innerHTML=`<iframe src="https://geo.dailymotion.com/player.html?video=${encodeURIComponent(x.id)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title=""></iframe>`;
+  $("frame").innerHTML=`<iframe src="${x.embed}${x.embed.includes("?")?"&":"?"}autoplay=1" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title=""></iframe>`;
   $("pTitle").textContent=x.title;
   $("pExt").href="https://www.dailymotion.com/video/"+encodeURIComponent(x.id);
   $("pMeta").textContent=`${x.channel} · ${new Date(x.ts).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`;
