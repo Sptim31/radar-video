@@ -63,6 +63,35 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 .vid .m{font-size:12px;color:var(--muted);margin-top:3px}
 .vid .geo{color:var(--accent)}
 .empty{padding:24px 12px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
+/* mode cinéma */
+.theater{position:fixed;inset:0;z-index:3000;background:#050608;color:#f2f4f7;display:flex;flex-direction:column;padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px)}
+.tbar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #1d222b;min-width:0}
+.tdot{width:8px;height:8px;border-radius:50%;background:#ff3b3b;flex:none}
+.tevent{font:800 15px var(--f-display);text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}
+.tsub{font:11px var(--f-mono);color:#8b93a1;white-space:nowrap}
+.ttabs{display:flex;gap:4px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
+.ttabs button{background:none;border:0;border-bottom:2px solid transparent;color:#aab2bf;font:600 12px var(--f-body);padding:6px 8px;white-space:nowrap;cursor:pointer}
+.ttabs button[aria-current="true"]{color:#fff;border-bottom-color:#ff3b3b}
+.ttabs .n{display:inline-block;margin-left:4px;font:10px var(--f-mono);background:#1d222b;color:#cfd5de;border-radius:4px;padding:0 4px}
+.ttabs button[aria-current="true"] .n{background:#ff3b3b;color:#fff}
+.tctl{display:flex;gap:6px;flex:none}
+.tbtn{background:none;border:1px solid #3a2226;color:#ff6b6b;font:600 11px var(--f-mono);padding:5px 8px;border-radius:5px;cursor:pointer}
+.tbtn[aria-pressed="true"]{background:#ff3b3b;border-color:#ff3b3b;color:#fff}
+.thead{padding:14px 0 8px;border-left:3px solid #ff3b3b;padding-left:14px;margin-top:10px}
+.thead h2{margin:0;font:800 clamp(24px,4vw,40px)/1 var(--f-display);text-transform:uppercase;letter-spacing:-.01em}
+.tmeta{font:11px var(--f-mono);color:#8b93a1;margin-top:6px}
+.tstage{flex:1;min-height:0;display:flex;align-items:center;gap:10px;padding:8px 0}
+.tframe{flex:1;min-width:0;height:100%;display:flex;align-items:center;justify-content:center}
+.tframe iframe,#ytp{width:100%;max-height:100%;aspect-ratio:16/9;border:0;background:#000}
+.tarrow{flex:none;width:36px;height:36px;border-radius:50%;border:1px solid #2a303a;background:#111419;color:#fff;font-size:18px;cursor:pointer}
+.tarrow:disabled{opacity:.3}
+.tcap{font:600 clamp(15px,1.8vw,20px)/1.3 var(--f-body);text-align:center;max-width:70ch;margin:0 auto;padding:4px 0 10px;text-wrap:balance}
+.tstrip{display:flex;gap:6px;overflow-x:auto;padding:8px 0 12px;scrollbar-width:thin}
+.tstrip button{flex:none;width:96px;padding:0;border:2px solid transparent;border-radius:4px;background:#111;cursor:pointer;color:#cfd5de;text-align:left}
+.tstrip button[aria-current="true"]{border-color:#ff3b3b}
+.tstrip img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:2px}
+.tstrip span{display:block;font:10px var(--f-mono);padding:2px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){.tarrow{display:none}.tsub{display:none}}
 /* lecteur */
 .modal{position:fixed;inset:0;z-index:2000;background:rgba(5,8,12,.86);display:flex;align-items:center;justify-content:center;padding:16px}
 .player{width:min(960px,100%);display:flex;flex-direction:column;gap:10px}
@@ -149,21 +178,25 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
   </main>
 </div>
 
-<div class="modal" id="modal" hidden>
-  <div class="player">
-    <button class="close-top" id="pClose2" aria-label="Fermer la vidéo">✕ Fermer</button>
-    <div class="frame" id="frame"></div>
-    <div class="pinfo">
-      <button class="pbtn" id="pPrev" aria-label="Vidéo précédente">‹</button>
-      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div></div>
-      <button class="pbtn" id="pNext" aria-label="Vidéo suivante">›</button>
-      <button class="pbtn" id="pClose" aria-label="Fermer">✕</button>
-    </div>
+<div class="theater" id="theater" hidden>
+  <div class="tbar">
+    <span class="tdot"></span><b class="tevent" id="tEvent"></b><span class="tsub" id="tRange"></span>
+    <nav class="ttabs" id="tTabs"></nav>
+    <div class="tctl"><button id="tAuto" class="tbtn" aria-pressed="true">AUTO</button><button id="tClose" class="tbtn" aria-label="Fermer">✕</button></div>
   </div>
+  <div class="thead"><h2 id="tCity"></h2><div class="tmeta" id="tMeta"></div></div>
+  <div class="tstage">
+    <button class="tarrow" id="tPrev" aria-label="Vidéo précédente">‹</button>
+    <div class="tframe"><div id="ytp"></div></div>
+    <button class="tarrow" id="tNext" aria-label="Vidéo suivante">›</button>
+  </div>
+  <div class="tcap" id="tCap"></div>
+  <div class="tstrip" id="tStrip"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const LOCAL_MEDIA='"France 3"|"ici"|"Ouest-France"|"La Dépêche"|"Le Parisien"|"actu.fr"|"Nice-Matin"|"Sud Ouest"|"La Voix du Nord"|"Le Progrès"|"Le Dauphiné"|"BFM"|"Le Télégramme"|"La Provence"';
 const THEMES=[
@@ -177,7 +210,7 @@ const THEMES=[
 ];
 const $=id=>document.getElementById(id);
 const S={date:today(),theme:0,videos:[],shown:[],city:null,text:null,idx:-1,req:0};
-let COMMUNES=[], IDX=new Map();
+let COMMUNES=[], REGIONS=[], IDX=new Map();
 
 /* ---------- dates ---------- */
 function today(){return iso(new Date())}
@@ -333,12 +366,15 @@ function show(cityIdx){
   if(cityIdx==null && !S.text){const loc=placed.length;
     setStatus(`${loc} vidéos placées dans ${new Set(placed.map(v=>v.city)).size} villes`+(S.showAll?` · ${all.length-loc} sans ville affichées aussi`:""));
     const t=document.createElement("button");t.className="btn";t.textContent=S.showAll?"Masquer les vidéos sans ville":`Voir aussi les ${all.length-loc} vidéos sans ville`;
-    t.onclick=()=>{S.showAll=!S.showAll;show(null)}; if(all.length>loc) $("actions").append(t)}
+    t.onclick=()=>{S.showAll=!S.showAll;show(null)}; if(all.length>loc) $("actions").append(t);
+    if(loc){const c=document.createElement("button");c.className="btn primary";c.textContent="▶ Mode cinéma";c.onclick=()=>openTheater(placed,0,"all",null);$("actions").prepend(c)}}
   else setStatus(`${list.length} vidéo${list.length>1?"s":""}`);
   if(cityIdx!=null){
     const b=document.createElement("button");b.className="btn";b.textContent="Chercher plus de vidéos à "+COMMUNES[cityIdx][0];
     b.onclick=()=>moreForCity(cityIdx);
     const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;show(null)};
+    const cc=document.createElement("button");cc.className="btn primary";cc.textContent="▶ Mode cinéma";cc.onclick=()=>openTheater(list,0,"city",cityIdx);
+    if(list.length) $("actions").append(cc);
     $("actions").append(a,b);
   }
   renderList(list);
@@ -388,20 +424,74 @@ async function moreForCity(ci){
 function selectCity(ci,fly){ S.text=null; if(fly) map.setView([COMMUNES[ci][1],COMMUNES[ci][2]],Math.max(map.getZoom(),11)); show(ci);
   if(!S.videos.some(v=>v.city===ci)) moreForCity(ci) }
 
-/* ---------- lecteur ---------- */
-function play(i){
-  const list=S.shown; if(i<0||i>=list.length) return; S.idx=i; const x=list[i];
-  $("frame").innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(x.id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=""></iframe>`;
-  $("pTitle").textContent=x.title;
-  $("pMeta").textContent=`${x.channel} · ${new Date(x.ts).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`+(x.city>=0?" · "+COMMUNES[x.city][0]:"");
-  $("pPrev").disabled=i===0; $("pNext").disabled=i===list.length-1; $("modal").hidden=false;
+/* ---------- mode cinéma ---------- */
+const T={list:[],i:0,tab:"all",auto:true,player:null,ready:false,pending:null};
+function regionOf(v){return v.city>=0?COMMUNES[v.city][4]:-1}
+function tabList(tab){
+  const all=S.videos.filter(okDur);
+  const l=tab==="all"?all.filter(v=>v.city>=0):tab==="none"?all.filter(v=>v.city<0):tab==="city"?all.filter(v=>v.city===T.cityIdx):all.filter(v=>regionOf(v)===tab);
+  return l.slice().sort((a,b)=>a.ts-b.ts);
 }
-function closePlayer(){$("modal").hidden=true;$("frame").innerHTML=""}
-$("pClose").onclick=closePlayer; $("pClose2").onclick=closePlayer;
-$("pPrev").onclick=()=>play(S.idx-1); $("pNext").onclick=()=>play(S.idx+1);
-$("modal").onclick=e=>{if(e.target.id==="modal")closePlayer()};
-document.addEventListener("keydown",e=>{ if($("modal").hidden) return;
-  if(e.key==="Escape")closePlayer(); if(e.key==="ArrowRight")play(S.idx+1); if(e.key==="ArrowLeft")play(S.idx-1)});
+function renderTabs(){
+  const all=S.videos.filter(okDur), cnt=new Map(); let none=0;
+  all.forEach(v=>{const r=regionOf(v); if(r<0) none++; else cnt.set(r,(cnt.get(r)||0)+1)});
+  const tabs=[["map","Carte",null],["all","Toute la France",all.length-none]];
+  if(T.cityIdx!=null) tabs.push(["city",COMMUNES[T.cityIdx][0],all.filter(v=>v.city===T.cityIdx).length]);
+  [...cnt.entries()].sort((a,b)=>b[1]-a[1]).forEach(([r,n])=>tabs.push([r,REGIONS[r],n]));
+  if(none) tabs.push(["none","Non classé",none]);
+  const nav=$("tTabs"); nav.innerHTML="";
+  tabs.forEach(([id,lab,n])=>{const b=document.createElement("button");b.textContent=lab;
+    if(n!=null){const c=document.createElement("span");c.className="n";c.textContent=n;b.appendChild(c)}
+    b.setAttribute("aria-current",id===T.tab);
+    b.onclick=()=>{ if(id==="map") return closeTheater(); T.tab=id; T.list=tabList(id); T.i=0; renderTabs(); renderStrip(); go(0) };
+    nav.appendChild(b)});
+}
+function renderStrip(){
+  const el=$("tStrip"); el.innerHTML="";
+  T.list.forEach((v,k)=>{const b=document.createElement("button");b.innerHTML=`<img loading="lazy" alt=""><span></span>`;
+    b.querySelector("img").src=v.thumb; b.querySelector("span").textContent=(v.city>=0?COMMUNES[v.city][0]:"?")+" · "+fmtTime(v.ts);
+    b.onclick=()=>go(k); el.appendChild(b)});
+}
+function openTheater(list,start,tab,cityIdx){
+  T.cityIdx=cityIdx; T.tab=tab; T.list=list.slice().sort((a,b)=>a.ts-b.ts);
+  const v0=list[start]; T.i=Math.max(0,T.list.indexOf(v0));
+  const th=THEMES[S.theme][0]; const d=parse(S.date);
+  $("tEvent").textContent=(th==="Tout"?"Actu":th)+" du "+d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"});
+  $("tRange").textContent=d.toLocaleDateString("fr-FR",{weekday:"long",year:"numeric"});
+  $("theater").hidden=false; renderTabs(); renderStrip(); go(T.i);
+}
+function go(k){
+  if(!T.list.length){$("tCity").textContent="Aucune vidéo";$("tMeta").textContent="";$("tCap").textContent="";return}
+  k=Math.max(0,Math.min(T.list.length-1,k)); T.i=k; const v=T.list[k];
+  $("tCity").textContent=v.city>=0?COMMUNES[v.city][0]:"France";
+  const reg=v.city>=0?REGIONS[COMMUNES[v.city][4]]:"Non classé";
+  $("tMeta").textContent=`${reg} · ${new Date(v.ts).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})} · ${fmtTime(v.ts)} · ${k+1}/${T.list.length} · ${v.channel}`;
+  $("tCap").textContent=v.title;
+  $("tPrev").disabled=k===0; $("tNext").disabled=k===T.list.length-1;
+  document.querySelectorAll("#tStrip button").forEach((b,n)=>b.setAttribute("aria-current",n===k));
+  const cur=$("tStrip").children[k]; if(cur) cur.scrollIntoView({block:"nearest",inline:"center",behavior:"smooth"});
+  loadVideo(v.id);
+}
+function loadVideo(id){
+  if(T.player&&T.ready){T.player.loadVideoById(id);return}
+  T.pending=id;
+  if(!T.player && window.YT && YT.Player){
+    T.player=new YT.Player("ytp",{host:"https://www.youtube-nocookie.com",videoId:id,
+      playerVars:{autoplay:1,rel:0,playsinline:1,modestbranding:1},
+      events:{onReady:e=>{T.ready=true; if(T.pending&&T.pending!==id) e.target.loadVideoById(T.pending); else e.target.playVideo()},
+              onStateChange:e=>{ if(e.data===0 && T.auto && T.i<T.list.length-1) go(T.i+1) },
+              onError:()=>{ if(T.auto && T.i<T.list.length-1) setTimeout(()=>go(T.i+1),800) }}});
+  } else if(!window.YT || !YT.Player){ // API pas encore prête : iframe simple
+    $("ytp").outerHTML=`<iframe id="ytp" src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title=""></iframe>`;
+  }
+}
+function closeTheater(){ $("theater").hidden=true; if(T.player&&T.ready) T.player.stopVideo(); else { const f=document.querySelector("iframe#ytp"); if(f) f.outerHTML='<div id="ytp"></div>' } }
+function play(i){ const v=S.shown[i]; const tab=S.city!=null?"city":(v&&v.city<0?"none":"all"); openTheater(tabList(tab).length?S.shown:S.shown,i,tab,S.city) }
+$("tClose").onclick=closeTheater;
+$("tPrev").onclick=()=>go(T.i-1); $("tNext").onclick=()=>go(T.i+1);
+$("tAuto").onclick=()=>{T.auto=!T.auto;$("tAuto").setAttribute("aria-pressed",T.auto)};
+document.addEventListener("keydown",e=>{ if($("theater").hidden) return;
+  if(e.key==="Escape")closeTheater(); if(e.key==="ArrowRight")go(T.i+1); if(e.key==="ArrowLeft")go(T.i-1)});
 
 /* ---------- clé ---------- */
 $("keyBtn").onclick=()=>{$("keyCard").hidden=!$("keyCard").hidden; $("keyInput").value=getKey()};
@@ -426,7 +516,7 @@ $("q").addEventListener("input",()=>{ // propose les communes au fil de la frapp
 
 /* ---------- démarrage ---------- */
 renderHeader(); setStatus("Chargement des villes…");
-fetch("communes.json").then(r=>r.json()).then(d=>{COMMUNES=d; buildIndex(); load()})
+fetch("communes.json").then(r=>r.json()).then(d=>{COMMUNES=d.c; REGIONS=d.regions; buildIndex(); load()})
   .catch(()=>setStatus("Impossible de charger la liste des villes.",true));
 </script>
 </body>
