@@ -123,6 +123,7 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
         <input type="date" id="dateInput" aria-label="Choisir une date">
       </div>
       <div class="row" id="themes"></div>
+      <div class="row" id="durs"></div>
 
       <section class="keycard" id="keyCard" hidden>
         <div class="kt">Une seule fois : ta clé YouTube</div>
@@ -236,13 +237,22 @@ function isFrench(v){
   const w=t.toLowerCase().split(/[^a-zàâçéèêëîïôûùüÿœ']+/); let n=0; for(const x of w) if(FR_WORDS.has(x)) n++;
   return n>=3 || (/[éèàçê]/.test(t) && n>=1);
 }
+function isoDur(d){const m=/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d||"");return m?(+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0):0}
+function fmtDur(s){if(!s)return"";const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`:`${m}:${String(x).padStart(2,"0")}`}
+const FOREIGN=/\b(togo|togolais|côte d.ivoire|ivoirien|cameroun|sénégal|mali|malien|burkina|niger|guinée|congo|rdc|kinshasa|gabon|bénin|tchad|madagascar|algérie|algérien|maroc|marocain|tunisie|tunisien|haïti|haïtien|québec|canada|belgique|bruxelles|suisse|genève|liban|israël|gaza|palestin|ukraine|russie|poutine|états-unis|usa|trump|iran|syrie|chine|inde)\b/i;
 function nearestCommune(lat,lng){
   if(lat<41||lat>51.2||lng<-5.3||lng>9.7) return -1;
   let best=-1,bd=1e9; const k=Math.cos(lat*Math.PI/180);
   for(let i=0;i<COMMUNES.length;i++){const c=COMMUNES[i]; const d=(c[1]-lat)**2+((c[2]-lng)*k)**2; if(d<bd){bd=d;best=i}}
   return bd<0.0025?best:-1; // ~5 km
 }
-function locate(v){let c=v.lat!=null?nearestCommune(v.lat,v.lng):-1; if(c<0) c=findCity(v.title); if(c<0&&v.tags) c=findCity(v.tags); if(c<0) c=findCity(v.desc); v.city=c; return v}
+function locate(v){
+  let c=v.lat!=null?nearestCommune(v.lat,v.lng):-1;
+  if(c<0) c=findCity(v.title);
+  const foreign=FOREIGN.test(v.title)||FOREIGN.test((v.tags||"").slice(0,200));
+  if(c<0&&!foreign&&v.tags) c=findCity(v.tags);
+  if(c<0&&!foreign) c=findCity(v.desc.slice(0,250));
+  v.city=c; return v}
 
 async function fetchSet(cacheKey,queries,pages){
   const hit=store.get(cacheKey), fresh=daysAgo(S.date)===0?30*60e3:7*864e5;
@@ -258,10 +268,10 @@ async function fetchSet(cacheKey,queries,pages){
   }
   const ids=[...seen.keys()];
   for(let i=0;i<ids.length;i+=50){
-    const p=new URLSearchParams({part:"snippet,recordingDetails",id:ids.slice(i,i+50).join(","),key:getKey()});
+    const p=new URLSearchParams({part:"snippet,recordingDetails,contentDetails",id:ids.slice(i,i+50).join(","),key:getKey()});
     try{const j=await (await fetch("https://www.googleapis.com/youtube/v3/videos?"+p)).json();
       (j.items||[]).forEach(it=>{const v=seen.get(it.id); if(!v) return; const sn=it.snippet||{};
-        v.desc=decode(sn.description||v.desc); v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.lang=sn.defaultAudioLanguage||sn.defaultLanguage||"";
+        v.desc=decode(sn.description||v.desc); v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.lang=sn.defaultAudioLanguage||sn.defaultLanguage||""; v.dur=isoDur((it.contentDetails||{}).duration);
         const loc=it.recordingDetails&&it.recordingDetails.location; if(loc&&loc.latitude!=null){v.lat=loc.latitude;v.lng=loc.longitude}})}catch{}
   }
   const v=[...seen.values()].sort((a,b)=>b.ts-a.ts).map(x=>({...x,desc:x.desc.slice(0,600)})).filter(isFrench);
@@ -275,14 +285,14 @@ async function load(){
   const [,queries,pages]=THEMES[S.theme]; const id=++S.req;
   setStatus("Chargement des vidéos du jour…"); $("list").innerHTML=""; $("actions").innerHTML="";
   try{
-    const v=await fetchSet(`rv2:${S.date}:${S.theme}`,queries,pages);
+    const v=await fetchSet(`rv3:${S.date}:${S.theme}`,queries,pages);
     if(id!==S.req) return;
     S.videos=v.map(locate); drawBubbles(); show(null);
   }catch(e){ if(id===S.req){ setStatus(e.message,true); if(e.keyErr) $("keyCard").hidden=false } }
 }
 function drawBubbles(){
   bubbles.clearLayers();
-  const count=new Map(); S.videos.forEach(v=>{ if(v.city>=0) count.set(v.city,(count.get(v.city)||0)+1) });
+  const count=new Map(); S.videos.forEach(v=>{ if(v.city>=0&&okDur(v)) count.set(v.city,(count.get(v.city)||0)+1) });
   count.forEach((n,ci)=>{const c=COMMUNES[ci];
     L.marker([c[1],c[2]],{icon:bubbleIcon(n,false),count:n,title:c[0]+" · "+n+" vidéo"+(n>1?"s":"")})
       .on("click",()=>selectCity(ci,false)).addTo(bubbles)});
@@ -295,7 +305,12 @@ $("dateInput").max=today();
 $("dateInput").onchange=()=>{const v=$("dateInput").value; if(v){S.date=v>today()?today():v;load()}};
 $("prev").onclick=()=>{S.date=addDays(S.date,-1);load()};
 $("next").onclick=()=>{if(S.date<today()){S.date=addDays(S.date,1);load()}};
+const DURS=[["Toutes durées",1e9],["Moins de 20 min",1200],["Moins de 5 min",300]]; S.maxDur=1200;
+DURS.forEach(([lab,v])=>{const b=document.createElement("button");b.className="chip";b.textContent=lab;b.dataset.v=v;
+  b.onclick=()=>{S.maxDur=v; if(S.videos.length){drawBubbles();show(S.city)} renderHeader()};$("durs").appendChild(b)});
+const okDur=v=>v.live||!v.dur||v.dur<=S.maxDur;
 function renderHeader(){
+  document.querySelectorAll("#durs .chip").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.v===S.maxDur));
   const ago=daysAgo(S.date);
   $("kind").textContent=S.city!=null?"Ville":S.text?"Recherche":"Pays";
   $("placeName").textContent=S.city!=null?COMMUNES[S.city][0]:S.text||"France";
@@ -308,13 +323,13 @@ function setStatus(t,err){const s=$("status");s.textContent=t;s.classList.toggle
 
 function show(cityIdx){
   S.city=cityIdx; renderHeader(); $("actions").innerHTML="";
-  const placed=S.videos.filter(v=>v.city>=0);
-  const list=cityIdx!=null?S.videos.filter(v=>v.city===cityIdx):(S.showAll?S.videos:placed);
+  const all=S.videos.filter(okDur), placed=all.filter(v=>v.city>=0);
+  const list=cityIdx!=null?all.filter(v=>v.city===cityIdx):(S.showAll?all:placed);
   S.shown=list;
-  if(cityIdx==null && !S.text){const loc=S.videos.filter(v=>v.city>=0).length;
-    setStatus(`${loc} vidéos placées dans ${new Set(placed.map(v=>v.city)).size} villes`+(S.showAll?` · ${S.videos.length-loc} sans ville affichées aussi`:""));
-    const t=document.createElement("button");t.className="btn";t.textContent=S.showAll?"Masquer les vidéos sans ville":`Voir aussi les ${S.videos.length-loc} vidéos sans ville`;
-    t.onclick=()=>{S.showAll=!S.showAll;show(null)}; if(S.videos.length>loc) $("actions").append(t)}
+  if(cityIdx==null && !S.text){const loc=placed.length;
+    setStatus(`${loc} vidéos placées dans ${new Set(placed.map(v=>v.city)).size} villes`+(S.showAll?` · ${all.length-loc} sans ville affichées aussi`:""));
+    const t=document.createElement("button");t.className="btn";t.textContent=S.showAll?"Masquer les vidéos sans ville":`Voir aussi les ${all.length-loc} vidéos sans ville`;
+    t.onclick=()=>{S.showAll=!S.showAll;show(null)}; if(all.length>loc) $("actions").append(t)}
   else setStatus(`${list.length} vidéo${list.length>1?"s":""}`);
   if(cityIdx!=null){
     const b=document.createElement("button");b.className="btn";b.textContent="Chercher plus de vidéos à "+COMMUNES[cityIdx][0];
@@ -333,6 +348,7 @@ function renderList(list){
     b.innerHTML=`<div class="thumb"><img loading="lazy" alt=""></div><div><div class="t"></div><div class="m"></div></div>`;
     b.querySelector("img").src=x.thumb;
     if(x.live) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="lv">EN DIRECT</span>`);
+    else if(x.dur) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="dur">${fmtDur(x.dur)}</span>`);
     b.querySelector(".t").textContent=x.title;
     b.querySelector(".m").textContent=`${x.channel} · ${fmtTime(x.ts)}`+(x.city>=0?" · ":"");
     if(x.city>=0){const s=document.createElement("span");s.className="geo";s.textContent="◉ "+COMMUNES[x.city][0];b.querySelector(".m").appendChild(s)}
@@ -343,7 +359,7 @@ function renderList(list){
 async function moreForCity(ci){
   const c=COMMUNES[ci]; const id=++S.req; setStatus("Recherche de vidéos à "+c[0]+"…",false);
   try{
-    const extra=await fetchSet(`rv2:${S.date}:city:${norm(c[0])}`,[c[0]],1);
+    const extra=await fetchSet(`rv3:${S.date}:city:${norm(c[0])}`,[c[0]],1);
     if(id!==S.req) return;
     const have=new Set(S.videos.map(v=>v.id));
     extra.forEach(v=>{ if(have.has(v.id)) return; locate(v); if(v.city<0) v.city=ci; S.videos.push(v) });
@@ -379,7 +395,7 @@ $("searchForm").onsubmit=async e=>{
   const ci=IDX.get(norm(raw)); if(ci!==undefined) return selectCity(ci,true);
   if(!getKey()){ $("keyCard").hidden=false; return }
   const id=++S.req; S.text=raw; S.city=null; renderHeader(); setStatus("Recherche…"); $("actions").innerHTML="";
-  try{ const v=await fetchSet(`rv2:${S.date}:q:${norm(raw)}`,[raw],1); if(id!==S.req) return;
+  try{ const v=await fetchSet(`rv3:${S.date}:q:${norm(raw)}`,[raw],1); if(id!==S.req) return;
     S.shown=v.map(locate); renderList(S.shown); setStatus(`${v.length} vidéos pour « ${raw} »`);
     const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;load()};$("actions").append(a);
   }catch(err){ if(id===S.req) setStatus(err.message,true) }
