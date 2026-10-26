@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Radar Vidéo France</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -85,6 +86,18 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 .leaflet-container{font-family:var(--f-body)}
 @media (prefers-color-scheme:dark){.tiles{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}}
 @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+
+.marker-cluster,.marker-cluster div{background:none!important}
+.bub{display:grid;place-items:center;border-radius:50%;background:var(--live);color:#fff;font:600 12px var(--f-mono);border:2px solid var(--halo);box-shadow:0 1px 6px rgba(0,0,0,.35);cursor:pointer}
+.bub.cl{background:var(--accent)}
+.keycard{margin-top:14px;padding:14px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-soft)}
+.keycard .kt{font:600 15px var(--f-display);margin-bottom:6px}
+.keycard ol{margin:0 0 10px;padding-left:18px;line-height:1.5}
+.keycard a{color:var(--accent)}
+.keyform{display:flex;gap:6px}
+.keyform input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-family:var(--f-mono)}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.actions:empty{display:none}
 </style>
 </head>
 <body>
@@ -92,10 +105,11 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
   <header>
     <div class="brand"><span class="dot"></span><h1>Radar Vidéo France</h1></div>
     <form class="search" id="searchForm" autocomplete="off">
-      <input id="q" list="placesList" placeholder="Ville, département, sujet…" aria-label="Chercher">
+      <input id="q" list="placesList" placeholder="Ville (même petite) ou sujet…" aria-label="Chercher">
       <datalist id="placesList"></datalist>
       <button class="btn primary" type="submit">Aller</button>
     </form>
+    <button class="btn" id="keyBtn" type="button">Clé YouTube</button>
   </header>
   <main>
     <div id="map"></div>
@@ -109,19 +123,34 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
         <input type="date" id="dateInput" aria-label="Choisir une date">
       </div>
       <div class="row" id="themes"></div>
-      <label class="toggle"><input type="checkbox" id="auto" checked> Changer de ville automatiquement quand je zoome / déplace la carte</label>
+
+      <section class="keycard" id="keyCard" hidden>
+        <div class="kt">Une seule fois : ta clé YouTube</div>
+        <ol>
+          <li>Ouvre <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> et clique <b>Activer</b> (crée un projet si on te le demande).</li>
+          <li>Va dans <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Identifiants</a> → <b>Créer des identifiants</b> → <b>Clé API</b>.</li>
+          <li>Colle la clé ici. Elle reste dans ton navigateur.</li>
+        </ol>
+        <form id="keyForm" class="keyform">
+          <input id="keyInput" placeholder="AIza…" aria-label="Clé API YouTube" autocomplete="off">
+          <button class="btn primary" type="submit">Enregistrer</button>
+        </form>
+      </section>
+
       <div class="status" id="status"></div>
+      <div class="actions" id="actions"></div>
       <div class="list" id="list"></div>
     </aside>
   </main>
 </div>
 
 <div class="modal" id="modal" hidden>
-  <div class="player"><button class="close-top" id="pClose2" aria-label="Fermer la vidéo">✕ Fermer</button>
+  <div class="player">
+    <button class="close-top" id="pClose2" aria-label="Fermer la vidéo">✕ Fermer</button>
     <div class="frame" id="frame"></div>
     <div class="pinfo">
       <button class="pbtn" id="pPrev" aria-label="Vidéo précédente">‹</button>
-      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div><a class="ext" id="pExt" target="_blank" rel="noopener">Ne se lance pas ? Ouvrir sur Dailymotion ↗</a></div>
+      <div class="txt"><div class="t" id="pTitle"></div><div class="m" id="pMeta"></div></div>
       <button class="pbtn" id="pNext" aria-label="Vidéo suivante">›</button>
       <button class="pbtn" id="pClose" aria-label="Fermer">✕</button>
     </div>
@@ -129,184 +158,214 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-// [nom, lat, lon, palier]
-const CITIES = [
-["Paris",48.857,2.352,1],["Marseille",43.296,5.370,1],["Lyon",45.764,4.835,1],["Toulouse",43.605,1.444,1],["Nice",43.710,7.262,1],
-["Nantes",47.218,-1.554,1],["Montpellier",43.611,3.877,1],["Strasbourg",48.573,7.752,1],["Bordeaux",44.838,-0.579,1],["Lille",50.629,3.057,1],
-["Rennes",48.117,-1.678,1],["Reims",49.258,4.032,1],["Toulon",43.124,5.928,1],["Saint-Étienne",45.439,4.387,1],["Le Havre",49.494,0.108,1],
-["Grenoble",45.188,5.724,1],["Dijon",47.322,5.041,1],["Angers",47.473,-0.554,1],["Nîmes",43.837,4.360,1],["Clermont-Ferrand",45.778,3.087,1],
-["Brest",48.390,-4.486,1],["Tours",47.394,0.684,1],["Amiens",49.894,2.296,1],["Limoges",45.834,1.261,1],["Metz",49.119,6.176,1],
-["Perpignan",42.699,2.895,1],["Orléans",47.903,1.909,1],["Rouen",49.443,1.099,1],["Caen",49.182,-0.371,1],["Ajaccio",41.919,8.737,1],
-["Le Mans",48.006,0.199,2],["Aix-en-Provence",43.529,5.447,2],["Besançon",47.238,6.024,2],["Mulhouse",47.750,7.336,2],["Nancy",48.692,6.184,2],
-["Avignon",43.949,4.806,2],["Poitiers",46.580,0.340,2],["Pau",43.295,-0.370,2],["La Rochelle",46.160,-1.151,2],["Calais",50.951,1.858,2],
-["Cannes",43.552,7.017,2],["Béziers",43.344,3.215,2],["Bourges",47.081,2.398,2],["Saint-Nazaire",47.273,-2.214,2],["Colmar",48.079,7.358,2],
-["Valence",44.933,4.892,2],["Annecy",45.899,6.129,2],["Bayonne",43.493,-1.475,2],["Dunkerque",51.034,2.377,2],["Troyes",48.297,4.074,2],
-["Chambéry",45.566,5.918,2],["Lorient",47.748,-3.370,2],["Quimper",47.996,-4.097,2],["Niort",46.323,-0.459,2],["Bastia",42.697,9.450,2],
-["Saint-Denis",48.936,2.358,2],["Versailles",48.804,2.130,2],["Vannes",47.658,-2.760,2],["Saint-Malo",48.649,-2.008,2],["Angoulême",45.648,0.156,2],
-["Cherbourg",49.639,-1.622,2],["Arles",43.677,4.631,2],["Lens",50.432,2.832,2],["Montauban",44.018,1.355,2],["Saint-Brieuc",48.514,-2.765,2],
-["Chartres",48.446,1.489,3],["Laval",48.073,-0.770,3],["Blois",47.586,1.335,3],["Châteauroux",46.811,1.691,3],["Agen",44.203,0.616,3],
-["Périgueux",45.184,0.722,3],["Brive-la-Gaillarde",45.159,1.533,3],["Carcassonne",43.213,2.353,3],["Fréjus",43.433,6.737,3],["Gap",44.559,6.079,3],
-["Boulogne-sur-Mer",50.726,1.614,3],["Charleville-Mézières",49.773,4.720,3],["Épinal",48.172,6.449,3],["Belfort",47.640,6.863,3],["Mâcon",46.307,4.828,3],
-["Nevers",46.990,3.159,3],["Auxerre",47.798,3.570,3],["Beauvais",49.430,2.081,3],["Évreux",49.027,1.151,3],["Alençon",48.433,0.093,3],
-["Saint-Lô",49.116,-1.090,3],["La Roche-sur-Yon",46.670,-1.427,3],["Cholet",47.060,-0.879,3],["Rodez",44.350,2.575,3],["Albi",43.929,2.148,3],
-["Tarbes",43.233,0.078,3],["Mont-de-Marsan",43.890,-0.500,3],["Aurillac",44.926,2.444,3],["Le Puy-en-Velay",45.043,3.885,3],["Vichy",46.128,3.426,3],
-["Guéret",46.171,1.871,3],["Tulle",45.267,1.772,3],["Cahors",44.448,1.441,3],["Foix",42.965,1.605,3],["Auch",43.646,0.586,3],
-["Mende",44.518,3.500,3],["Privas",44.735,4.599,3],["Digne-les-Bains",44.092,6.236,3],["Bourg-en-Bresse",46.205,5.226,3],["Lons-le-Saunier",46.675,5.555,3],
-["Vesoul",47.622,6.155,3],["Chaumont",48.111,5.139,3],["Bar-le-Duc",48.772,5.161,3],["Châlons-en-Champagne",48.957,4.364,3],["Laon",49.564,3.624,3],
-["Saint-Quentin",49.847,3.287,3],["Arras",50.291,2.778,3],["Melun",48.540,2.656,3],["Évry",48.630,2.441,3],["Cergy",49.036,2.065,3],
-["Montluçon",46.340,2.603,3],["Sète",43.403,3.697,3],["Biarritz",43.483,-1.559,3],["Draguignan",43.536,6.466,3],["Menton",43.775,7.497,3],
-["Porto-Vecchio",41.591,9.280,3],["Calvi",42.567,8.757,3],["Roubaix",50.691,3.174,3],["Créteil",48.790,2.455,3],["Nanterre",48.892,2.207,3],
-["Bobigny",48.909,2.440,3],["Villeurbanne",45.771,4.880,3],["Vénissieux",45.697,4.886,3],["Marignane",43.416,5.216,3],["Martigues",43.405,5.054,3]
+const THEMES=[
+  ["Tout",["actualité","faits divers","info","reportage"],1],
+  ["Faits divers",["faits divers"],3],
+  ["Météo",["intempéries météo"],2],
+  ["Manifs",["manifestation"],3],
+  ["Accidents",["accident"],2],
+  ["Incendies",["incendie"],2],
+  ["Sport",["match résumé"],3]
 ];
-const THEMES=[["Tout",""],["Actualité","actualité"],["Faits divers","faits divers"],["Météo","intempéries"],["Manifs","manifestation"],["Accidents","accident"],["Sport","sport"]];
-const AUTO_ZOOM=9; // zoom à partir duquel les vidéos de la zone se chargent toutes seules
+const $=id=>document.getElementById(id);
+const S={date:today(),theme:0,videos:[],shown:[],city:null,text:null,idx:-1,req:0};
+let COMMUNES=[], IDX=new Map();
 
-/* ---------- état ---------- */
-const S={date:today(),theme:0,range:1,target:{type:"france",name:"France"},videos:[],idx:-1,reqId:0};
+/* ---------- dates ---------- */
 function today(){return iso(new Date())}
 function iso(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function parse(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
 function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return iso(d)}
 function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
 
+/* ---------- stockage ---------- */
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+function getKey(){try{return localStorage.getItem("rv:key")||""}catch{return ""}}
+
 /* ---------- carte ---------- */
-const dark=matchMedia("(prefers-color-scheme: dark)").matches;
 const map=L.map("map",{zoomControl:true,worldCopyJump:true}).setView([46.6,2.4],6);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,className:"tiles",attribution:'&copy; OpenStreetMap'}).addTo(map);
-const cityLayers={1:L.layerGroup(),2:L.layerGroup(),3:L.layerGroup()};
-const cityMarker=new Map();
-CITIES.forEach(c=>{
-  const sz=c[3]===1?12:9;
-  const m=L.marker([c[1],c[2]],{icon:L.divIcon({className:"cpin",html:`<span style="width:${sz}px;height:${sz}px"></span>`,iconSize:[sz,sz]}),title:c[0]})
-    .bindTooltip(c[0],{permanent:true,direction:"right",className:"clabel",offset:[6,0]})
-    .on("click",()=>selectCity(c,true));
-  cityLayers[c[3]].addLayer(m); cityMarker.set(c,m);
-});
-function updateCityLayers(){const z=map.getZoom();[[1,5],[2,7],[3,8]].forEach(([t,minZ])=>{ if(z>=minZ) cityLayers[t].addTo(map); else map.removeLayer(cityLayers[t]); })}
+const bubbles=L.markerClusterGroup({
+  showCoverageOnHover:false,maxClusterRadius:45,spiderfyOnMaxZoom:false,zoomToBoundsOnClick:true,
+  iconCreateFunction:c=>{const n=c.getAllChildMarkers().reduce((a,m)=>a+m.options.count,0);return bubbleIcon(n,true)}
+}).addTo(map);
+function bubbleIcon(n,cluster){const s=Math.round(Math.min(58,22+Math.sqrt(n)*7));
+  return L.divIcon({className:"",html:`<div class="bub${cluster?" cl":""}" style="width:${s}px;height:${s}px">${n}</div>`,iconSize:[s,s]})}
+
+/* ---------- reconnaissance des villes dans les titres ---------- */
+const norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+function buildIndex(){ COMMUNES.forEach((c,i)=>{const k=norm(c[0]); if(!IDX.has(k)) IDX.set(k,i)}) } // trié par population : la plus grande gagne
+const SMALL=new Set(["de","du","des","la","le","les","sur","en","et","d","l","aux","au","sous","lès","lez","à"]);
+function findCity(text){
+  if(!text) return -1;
+  const toks=text.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const nt=toks.map(norm);
+  for(let i=0;i<toks.length;i++){
+    if(!/^\p{Lu}/u.test(toks[i])) continue;
+    for(let n=Math.min(6,toks.length-i);n>=1;n--){
+      const id=IDX.get(nt.slice(i,i+n).join(" "));
+      if(id!==undefined && toks.slice(i,i+n).every(t=>SMALL.has(t.toLowerCase())||/^[\p{Lu}\p{N}]/u.test(t))) return id;
+    }
+  }
+  return -1;
+}
+function decode(s){const t=document.createElement("textarea");t.innerHTML=s;return t.value}
+
+/* ---------- YouTube ---------- */
+async function yt(params){
+  const p=new URLSearchParams({part:"snippet",type:"video",maxResults:"50",order:"date",regionCode:"FR",relevanceLanguage:"fr",safeSearch:"moderate",key:getKey(),...params});
+  const r=await fetch("https://www.googleapis.com/youtube/v3/search?"+p); const j=await r.json();
+  if(j.error){const reason=(j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason)||"";
+    const e=new Error(reason.includes("quota")||reason==="dailyLimitExceeded"?"Quota YouTube du jour épuisé (il revient vers 9h).":
+      /key|API_KEY|keyInvalid/i.test(j.error.message+reason)?"Clé YouTube refusée. Vérifie-la (bouton Clé YouTube).":"YouTube : "+j.error.message);
+    e.keyErr=/key/i.test(j.error.message+reason)&&!reason.includes("quota"); throw e}
+  return j;
+}
+function dayRange(){const a=parse(S.date), b=parse(addDays(S.date,1));return {publishedAfter:a.toISOString(),publishedBefore:b.toISOString()}}
+function toVideo(it){const sn=it.snippet;return {id:it.id.videoId,title:decode(sn.title),desc:decode(sn.description||""),channel:decode(sn.channelTitle),
+  ts:Date.parse(sn.publishedAt),thumb:(sn.thumbnails.medium||sn.thumbnails.default).url,live:sn.liveBroadcastContent==="live",city:-1}}
+function locate(v){let c=findCity(v.title); if(c<0) c=findCity(v.desc); v.city=c; return v}
+
+async function fetchSet(cacheKey,queries,pages){
+  const hit=store.get(cacheKey), fresh=daysAgo(S.date)===0?30*60e3:7*864e5;
+  if(hit && Date.now()-hit.t<fresh) return hit.v;
+  const seen=new Map();
+  for(const q of queries){
+    let token="";
+    for(let p=0;p<pages;p++){
+      const j=await yt({q,...dayRange(),...(token?{pageToken:token}:{})});
+      (j.items||[]).forEach(it=>{ if(it.id.videoId && !seen.has(it.id.videoId)) seen.set(it.id.videoId,toVideo(it)) });
+      token=j.nextPageToken; if(!token) break;
+    }
+  }
+  const v=[...seen.values()].sort((a,b)=>b.ts-a.ts).map(x=>({...x,desc:x.desc.slice(0,200)}));
+  store.set(cacheKey,{t:Date.now(),v}); return v;
+}
+
+/* ---------- chargement ---------- */
+async function load(){
+  S.city=null; S.text=null; renderHeader();
+  if(!getKey()){ $("keyCard").hidden=false; setStatus(""); $("list").innerHTML=""; bubbles.clearLayers(); return }
+  const [,queries,pages]=THEMES[S.theme]; const id=++S.req;
+  setStatus("Chargement des vidéos du jour…"); $("list").innerHTML=""; $("actions").innerHTML="";
+  try{
+    const v=await fetchSet(`rv:${S.date}:${S.theme}`,queries,pages);
+    if(id!==S.req) return;
+    S.videos=v.map(locate); drawBubbles(); show(null);
+  }catch(e){ if(id===S.req){ setStatus(e.message,true); if(e.keyErr) $("keyCard").hidden=false } }
+}
+function drawBubbles(){
+  bubbles.clearLayers();
+  const count=new Map(); S.videos.forEach(v=>{ if(v.city>=0) count.set(v.city,(count.get(v.city)||0)+1) });
+  count.forEach((n,ci)=>{const c=COMMUNES[ci];
+    L.marker([c[1],c[2]],{icon:bubbleIcon(n,false),count:n,title:c[0]+" · "+n+" vidéo"+(n>1?"s":"")})
+      .on("click",()=>selectCity(ci,false)).addTo(bubbles)});
+}
 
 /* ---------- panneau ---------- */
-const $=id=>document.getElementById(id);
 THEMES.forEach(([lab],i)=>{const b=document.createElement("button");b.className="chip";b.textContent=lab;b.id="th"+i;
-  b.onclick=()=>{S.theme=i;renderHeader();load()};$("themes").appendChild(b)});
+  b.onclick=()=>{S.theme=i;load()};$("themes").appendChild(b)});
 $("dateInput").max=today();
-$("dateInput").onchange=()=>{const v=$("dateInput").value; if(v){S.date=v>today()?today():v;S.range=1;renderHeader();load()}};
-$("prev").onclick=()=>{S.date=addDays(S.date,-1);S.range=1;renderHeader();load()};
-$("next").onclick=()=>{if(S.date<today()){S.date=addDays(S.date,1);S.range=1;renderHeader();load()}};
-
+$("dateInput").onchange=()=>{const v=$("dateInput").value; if(v){S.date=v>today()?today():v;load()}};
+$("prev").onclick=()=>{S.date=addDays(S.date,-1);load()};
+$("next").onclick=()=>{if(S.date<today()){S.date=addDays(S.date,1);load()}};
 function renderHeader(){
-  const t=S.target;
-  $("kind").textContent=t.type==="city"?"Ville":t.type==="text"?"Recherche":"Pays";
-  $("placeName").textContent=t.name;
   const ago=daysAgo(S.date);
-  const long=parse(S.date).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-  $("longDate").textContent=long;
-  $("relDate").textContent=(ago===0?"aujourd'hui":ago===1?"hier":"il y a "+ago+" jours")+(S.range>1?" · + les "+(S.range-1)+" jours d'avant":"");
+  $("kind").textContent=S.city!=null?"Ville":S.text?"Recherche":"Pays";
+  $("placeName").textContent=S.city!=null?COMMUNES[S.city][0]:S.text||"France";
+  $("longDate").textContent=parse(S.date).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  $("relDate").textContent=ago===0?"aujourd'hui":ago===1?"hier":"il y a "+ago+" jours";
   $("dateInput").value=S.date; $("next").disabled=ago===0;
   THEMES.forEach((_,i)=>$("th"+i).setAttribute("aria-pressed",i===S.theme));
 }
 function setStatus(t,err){const s=$("status");s.textContent=t;s.classList.toggle("err",!!err)}
 
-/* ---------- vidéos (API publique Dailymotion, sans clé) ---------- */
-const FIELDS="id,title,created_time,duration,owner.screenname,views_total,thumbnail_360_url,onair,allow_embed,embed_url";
-async function dmSearch(q,fromTs,toTs){
-  const p=new URLSearchParams({search:q,sort:"recent",limit:"50",fields:FIELDS,created_after:fromTs,created_before:toTs});
-  const r=await fetch("https://api.dailymotion.com/videos?"+p);
-  const j=await r.json();
-  if(j.error) throw new Error(j.error.message||"Erreur Dailymotion");
-  return (j.list||[]).filter(v=>v.allow_embed!==false).map(v=>({id:v.id,embed:v.embed_url||("https://www.dailymotion.com/embed/video/"+v.id),title:v.title,channel:v["owner.screenname"]||"",ts:v.created_time*1000,
-    thumb:v.thumbnail_360_url,duration:fmtDur(v.duration),views:v.views_total||0,live:!!v.onair}));
-}
-function fmtDur(s){if(!s)return"";const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`:`${m}:${String(x).padStart(2,"0")}`}
-
-async function load(){
-  const t=S.target, theme=THEMES[S.theme][1];
-  let q=t.type==="france"?(theme||"actualité"):[t.name,theme].filter(Boolean).join(" ");
-  const end=parse(S.date); end.setDate(end.getDate()+1);
-  const start=parse(addDays(S.date,-(S.range-1)));
-  const id=++S.reqId; setStatus("Chargement des vidéos…"); $("list").innerHTML="";
-  try{
-    const v=await dmSearch(q,Math.floor(start/1000),Math.floor(end/1000));
-    if(id!==S.reqId) return;
-    S.videos=v; renderVideos();
-  }catch(e){ if(id===S.reqId) setStatus("Impossible de charger les vidéos ("+e.message+"). Vérifie ta connexion.",true) }
-}
-function fmtTime(ms){const d=new Date(ms);return (S.range>1?d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric"})+" ":"")+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
-function fmtViews(n){return n>=1e6?(n/1e6).toFixed(1)+" M vues":n>=1e3?Math.round(n/1e3)+" k vues":n+" vues"}
-
-function renderVideos(){
-  const list=$("list"); list.innerHTML="";
-  const v=S.videos;
-  setStatus(v.length?`${v.length} vidéo${v.length>1?"s":""} · clique pour lire`:"");
-  if(!v.length){
-    list.innerHTML=`<div class="empty">Aucune vidéo trouvée ce jour-là.<br><br></div>`;
-    if(S.range<7){const b=document.createElement("button");b.className="btn primary";b.textContent="Voir les 7 derniers jours";
-      b.onclick=()=>{S.range=7;renderHeader();load()};list.firstChild.appendChild(b)}
-    return;
+function show(cityIdx){
+  S.city=cityIdx; renderHeader(); $("actions").innerHTML="";
+  const list=S.text?S.videos:cityIdx==null?S.videos:S.videos.filter(v=>v.city===cityIdx);
+  S.shown=list;
+  if(cityIdx==null && !S.text){const loc=S.videos.filter(v=>v.city>=0).length;
+    setStatus(`${S.videos.length} vidéos · ${loc} placées sur la carte (${new Set(S.videos.filter(v=>v.city>=0).map(v=>v.city)).size} villes)`)}
+  else setStatus(`${list.length} vidéo${list.length>1?"s":""}`);
+  if(cityIdx!=null){
+    const b=document.createElement("button");b.className="btn";b.textContent="Chercher plus de vidéos à "+COMMUNES[cityIdx][0];
+    b.onclick=()=>moreForCity(cityIdx);
+    const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;show(null)};
+    $("actions").append(a,b);
   }
-  v.forEach((x,i)=>{
+  renderList(list);
+}
+function fmtTime(ms){return new Date(ms).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
+function renderList(list){
+  const el=$("list"); el.innerHTML="";
+  if(!list.length){el.innerHTML=`<div class="empty">Aucune vidéo ici pour ce jour et ce sujet.</div>`;return}
+  list.slice(0,300).forEach((x,i)=>{
     const b=document.createElement("button"); b.className="vid";
     b.innerHTML=`<div class="thumb"><img loading="lazy" alt=""></div><div><div class="t"></div><div class="m"></div></div>`;
     b.querySelector("img").src=x.thumb;
-    if(x.duration&&!x.live) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="dur">${x.duration}</span>`);
     if(x.live) b.querySelector(".thumb").insertAdjacentHTML("beforeend",`<span class="lv">EN DIRECT</span>`);
     b.querySelector(".t").textContent=x.title;
-    b.querySelector(".m").textContent=`${x.channel} · ${fmtTime(x.ts)} · ${fmtViews(x.views)}`;
+    b.querySelector(".m").textContent=`${x.channel} · ${fmtTime(x.ts)}`+(x.city>=0?" · ":"");
+    if(x.city>=0){const s=document.createElement("span");s.className="geo";s.textContent="◉ "+COMMUNES[x.city][0];b.querySelector(".m").appendChild(s)}
     b.onclick=()=>play(i);
-    list.appendChild(b);
+    el.appendChild(b);
   });
 }
+async function moreForCity(ci){
+  const c=COMMUNES[ci]; const id=++S.req; setStatus("Recherche de vidéos à "+c[0]+"…",false);
+  try{
+    const extra=await fetchSet(`rv:${S.date}:city:${norm(c[0])}`,[c[0]],1);
+    if(id!==S.req) return;
+    const have=new Set(S.videos.map(v=>v.id));
+    extra.forEach(v=>{ if(have.has(v.id)) return; locate(v); if(v.city<0) v.city=ci; S.videos.push(v) });
+    S.videos.sort((a,b)=>b.ts-a.ts); drawBubbles(); show(ci);
+  }catch(e){ if(id===S.req) setStatus(e.message,true) }
+}
+function selectCity(ci,fly){ S.text=null; if(fly) map.setView([COMMUNES[ci][1],COMMUNES[ci][2]],Math.max(map.getZoom(),11)); show(ci);
+  if(!S.videos.some(v=>v.city===ci)) moreForCity(ci) }
 
-/* ---------- lecteur intégré ---------- */
+/* ---------- lecteur ---------- */
 function play(i){
-  if(i<0||i>=S.videos.length) return;
-  S.idx=i; const x=S.videos[i];
-  $("frame").innerHTML=`<iframe src="${x.embed}${x.embed.includes("?")?"&":"?"}autoplay=1" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title=""></iframe>`;
+  const list=S.shown; if(i<0||i>=list.length) return; S.idx=i; const x=list[i];
+  $("frame").innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(x.id)}?autoplay=1&rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=""></iframe>`;
   $("pTitle").textContent=x.title;
-  $("pExt").href="https://www.dailymotion.com/video/"+encodeURIComponent(x.id);
-  $("pMeta").textContent=`${x.channel} · ${new Date(x.ts).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`;
-  $("pPrev").disabled=i===0; $("pNext").disabled=i===S.videos.length-1;
-  $("modal").hidden=false;
+  $("pMeta").textContent=`${x.channel} · ${new Date(x.ts).toLocaleString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"})}`+(x.city>=0?" · "+COMMUNES[x.city][0]:"");
+  $("pPrev").disabled=i===0; $("pNext").disabled=i===list.length-1; $("modal").hidden=false;
 }
 function closePlayer(){$("modal").hidden=true;$("frame").innerHTML=""}
-$("pClose").onclick=closePlayer; $("pClose2").onclick=closePlayer; $("pPrev").onclick=()=>play(S.idx-1); $("pNext").onclick=()=>play(S.idx+1);
+$("pClose").onclick=closePlayer; $("pClose2").onclick=closePlayer;
+$("pPrev").onclick=()=>play(S.idx-1); $("pNext").onclick=()=>play(S.idx+1);
 $("modal").onclick=e=>{if(e.target.id==="modal")closePlayer()};
 document.addEventListener("keydown",e=>{ if($("modal").hidden) return;
   if(e.key==="Escape")closePlayer(); if(e.key==="ArrowRight")play(S.idx+1); if(e.key==="ArrowLeft")play(S.idx-1)});
 
-/* ---------- sélection : zoom = la ville la plus proche du centre se charge toute seule ---------- */
-let current=null, moveTimer=null, flying=false;
-function highlight(c){ document.querySelectorAll(".cpin span").forEach(s=>s.style.background=""); if(c){const el=cityMarker.get(c).getElement(); if(el) el.firstChild.style.background="var(--live)"} }
-function selectCity(c,fly){
-  current=c; S.target={type:"city",name:c[0]}; S.range=1;
-  if(fly){flying=true; map.setView([c[1],c[2]],Math.max(map.getZoom(),10)); setTimeout(()=>flying=false,400)}
-  highlight(c); renderHeader(); load();
-}
-function autoPick(){
-  if(flying || !$("auto").checked || S.target.type==="text") return;
-  const z=map.getZoom();
-  if(z<8){ if(S.target.type!=="france"){current=null;highlight(null);S.target={type:"france",name:"France"};S.range=1;renderHeader();load()} return }
-  const c0=map.getCenter(), b=map.getBounds(); let best=null,bd=1e12;
-  CITIES.forEach(x=>{ if(!b.contains([x[1],x[2]])) return; const d=map.distance(c0,[x[1],x[2]])*(x[3]===1?0.7:x[3]===2?0.85:1); if(d<bd){bd=d;best=x} });
-  if(best && best!==current) selectCity(best,false);
-}
-map.on("zoomend",updateCityLayers);
-map.on("moveend",()=>{clearTimeout(moveTimer);moveTimer=setTimeout(autoPick,700)});
-map.on("layeradd",()=>highlight(current));
-$("auto").onchange=()=>{ if($("auto").checked){S.target={type:"france"};current=null;autoPick()} };
+/* ---------- clé ---------- */
+$("keyBtn").onclick=()=>{$("keyCard").hidden=!$("keyCard").hidden; $("keyInput").value=getKey()};
+$("keyForm").onsubmit=e=>{e.preventDefault(); const k=$("keyInput").value.trim(); if(!k) return;
+  try{localStorage.setItem("rv:key",k)}catch{} $("keyCard").hidden=true; load()};
 
 /* ---------- recherche ---------- */
-const norm=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
-CITIES.map(c=>c[0]).sort((a,b)=>a.localeCompare(b,"fr")).forEach(n=>{const o=document.createElement("option");o.value=n;$("placesList").appendChild(o)});
-$("searchForm").onsubmit=e=>{
+$("searchForm").onsubmit=async e=>{
   e.preventDefault(); const raw=$("q").value.trim(); if(!raw) return;
-  const c=CITIES.find(c=>norm(c[0])===norm(raw));
-  if(c) return selectCity(c,true);
-  current=null; highlight(null); S.target={type:"text",name:raw}; S.range=1; renderHeader(); load();
+  const ci=IDX.get(norm(raw)); if(ci!==undefined) return selectCity(ci,true);
+  if(!getKey()){ $("keyCard").hidden=false; return }
+  const id=++S.req; S.text=raw; S.city=null; renderHeader(); setStatus("Recherche…"); $("actions").innerHTML="";
+  try{ const v=await fetchSet(`rv:${S.date}:q:${norm(raw)}`,[raw],1); if(id!==S.req) return;
+    S.shown=v.map(locate); renderList(S.shown); setStatus(`${v.length} vidéos pour « ${raw} »`);
+    const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;load()};$("actions").append(a);
+  }catch(err){ if(id===S.req) setStatus(err.message,true) }
 };
+$("q").addEventListener("input",()=>{ // propose les communes au fil de la frappe
+  const v=norm($("q").value); const dl=$("placesList"); dl.innerHTML=""; if(v.length<2) return;
+  let n=0; for(const c of COMMUNES){ if(norm(c[0]).startsWith(v)){const o=document.createElement("option");o.value=c[0];dl.appendChild(o); if(++n>=12) break} }
+});
 
 /* ---------- démarrage ---------- */
-updateCityLayers(); renderHeader(); load();
+renderHeader(); setStatus("Chargement des villes…");
+fetch("communes.json").then(r=>r.json()).then(d=>{COMMUNES=d; buildIndex(); load()})
+  .catch(()=>setStatus("Impossible de charger la liste des villes.",true));
 </script>
 </body>
 </html>
