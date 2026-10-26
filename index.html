@@ -98,6 +98,10 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 .keyform input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-family:var(--f-mono)}
 .actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .actions:empty{display:none}
+.social{flex-basis:100%;margin-top:4px}
+.srow{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.sbtn{padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:13px;font-weight:600;box-shadow:inset 3px 0 0 var(--c)}
+.sbtn:hover{border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -336,8 +340,24 @@ function show(cityIdx){
     b.onclick=()=>moreForCity(cityIdx);
     const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;show(null)};
     $("actions").append(a,b);
+    $("actions").append(socialBar(COMMUNES[cityIdx]));
   }
   renderList(list);
+}
+function socialBar(c){
+  const name=c[0], tag=norm(name).replace(/ /g,""), q=encodeURIComponent, next=addDays(S.date,1);
+  const links=[
+    ["X","#000","https://x.com/search?q="+q(`"${name}" filter:videos since:${S.date} until:${next}`)+"&f=live"],
+    ["TikTok","#111","https://www.tiktok.com/search/video?q="+q(name)],
+    ["Insta","#d62976","https://www.instagram.com/explore/tags/"+q(tag)+"/"],
+    ["Snap Map","#e6c800",`https://map.snapchat.com/@${c[1]},${c[2]},12.00z`]
+  ];
+  const wrap=document.createElement("div"); wrap.className="social";
+  wrap.innerHTML=`<div class="eyebrow">Ailleurs (nouvel onglet)</div>`;
+  const row=document.createElement("div"); row.className="srow";
+  links.forEach(([n,col,u])=>{const a=document.createElement("a");a.href=u;a.target="_blank";a.rel="noopener";a.className="sbtn";
+    a.style.setProperty("--c",col);a.textContent=n+" ↗";row.appendChild(a)});
+  wrap.appendChild(row); return wrap;
 }
 function fmtTime(ms){return new Date(ms).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
 function renderList(list){
