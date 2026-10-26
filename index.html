@@ -200,13 +200,13 @@ aside{flex:1 1 50%;min-height:0;overflow:auto;background:var(--panel);border-top
 <script>
 const LOCAL_MEDIA='"France 3"|"ici"|"Ouest-France"|"La Dépêche"|"Le Parisien"|"actu.fr"|"Nice-Matin"|"Sud Ouest"|"La Voix du Nord"|"Le Progrès"|"Le Dauphiné"|"BFM"|"Le Télégramme"|"La Provence"';
 const THEMES=[
-  ["Tout",["faits divers|incendie|accident|pompiers|gendarmerie|police",LOCAL_MEDIA,"mairie|maire|habitants|commune|quartier","manifestation|grève|tempête|inondation|intempéries"],1],
-  ["Faits divers",["faits divers|gendarmerie|police|interpellé"],3],
-  ["Météo",["intempéries météo"],2],
-  ["Manifs",["manifestation"],3],
-  ["Accidents",["accident"],2],
-  ["Incendies",["incendie"],2],
-  ["Sport",["match résumé|but|Ligue 1|Ligue 2|National|rugby Top 14"],3]
+  ["Tout",null],
+  ["Faits divers",/faits? divers|police|gendarm|interpell|agress|meurtre|homicide|tué|poignard|cambriol|braquage|disparu|enquête|garde à vue|tribunal|procès|condamn|violences?/i],
+  ["Météo",/météo|tempête|orage|inond|vigilance|neige|canicule|crue|intempéries|grêle|rafales|tornade/i],
+  ["Manifs",/manif|grève|mobilisation|rassemblement|cortège|syndica|blocage|émeute|violences urbaines|black bloc/i],
+  ["Accidents",/accident|collision|percut|carambolage|crash|renvers|sortie de route|chauffard/i],
+  ["Incendies",/incendie|pompiers|flammes|brûl|explosion|feu de forêt|feux/i],
+  ["Sport",/match|ligue 1|ligue 2|rugby|top 14|football|basket|handball|psg|olympique|stade|supporters|but |victoire|défaite/i]
 ];
 const $=id=>document.getElementById(id);
 const S={date:today(),theme:0,videos:[],shown:[],city:null,text:null,idx:-1,req:0};
@@ -220,7 +220,9 @@ function addDays(s,n){const d=parse(s);d.setDate(d.getDate()+n);return iso(d)}
 function daysAgo(s){return Math.round((parse(today())-parse(s))/864e5)}
 
 /* ---------- stockage ---------- */
-const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},
+  set(k,v){const w=()=>localStorage.setItem(k,JSON.stringify(v));try{w()}catch{try{Object.keys(localStorage).filter(x=>/^rv\d*:\d{4}-/.test(x)&&x!==k).forEach(x=>localStorage.removeItem(x));w()}catch{}}}};
+try{Object.keys(localStorage).filter(x=>/^rv[234]?:\d{4}-/.test(x)).forEach(x=>localStorage.removeItem(x))}catch{}
 const DEFAULT_KEY="AIzaSyDAloESeGf9nw0KKT_u_05knDop5uTksbM";
 function getKey(){try{return localStorage.getItem("rv:key")||DEFAULT_KEY}catch{return DEFAULT_KEY}}
 
@@ -255,12 +257,12 @@ function decode(s){const t=document.createElement("textarea");t.innerHTML=s;retu
 
 /* ---------- YouTube ---------- */
 async function yt(params){
-  const p=new URLSearchParams({part:"snippet",type:"video",maxResults:"50",order:"date",regionCode:"FR",relevanceLanguage:"fr",safeSearch:"moderate",videoCategoryId:THEMES[S.theme][0]==="Sport"?"17":"25",key:getKey(),...params});
+  const p=new URLSearchParams({part:"snippet",type:"video",maxResults:"50",order:"date",regionCode:"FR",relevanceLanguage:"fr",safeSearch:"moderate",videoCategoryId:"25",key:getKey(),...params});
   const r=await fetch("https://www.googleapis.com/youtube/v3/search?"+p); const j=await r.json();
   if(j.error){const reason=(j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason)||"";
     const e=new Error(reason.includes("quota")||reason==="dailyLimitExceeded"?"Quota YouTube du jour épuisé (il revient vers 9h).":
       /key|API_KEY|keyInvalid/i.test(j.error.message+reason)?"Clé YouTube refusée. Vérifie-la (bouton Clé YouTube).":"YouTube : "+j.error.message);
-    e.keyErr=/key/i.test(j.error.message+reason)&&!reason.includes("quota"); throw e}
+    e.keyErr=/key/i.test(j.error.message+reason)&&!reason.includes("quota"); if(/quota/i.test(reason+j.error.message)) e.message="Quota de recherche YouTube épuisé pour aujourd'hui : la recherche par ville revient demain. La carte, elle, marche toujours."; throw e}
   return j;
 }
 function dayRange(){const a=parse(S.date), b=parse(addDays(S.date,1));return {publishedAfter:a.toISOString(),publishedBefore:b.toISOString()}}
@@ -322,13 +324,56 @@ async function fetchSet(cacheKey,queries,pages){
 }
 
 /* ---------- chargement ---------- */
+const HANDLES=["@BFMTV","@franceinfo","@TF1INFO","@LeParisien","@lemondefr","@LeFigaro","@20minutesfr","@CNEWS","@LCI","@France24_fr","@Europe1","@RMCinfo","@libe","@LeHuffPost","@BrutFR","@franceinter",
+ "@OuestFrance","@ladepeche","@SudOuest","@lavoixdunord","@leprogres","@ledauphinelibere","@nicematin","@laprovence","@letelegramme","@actufr","@Actu17","@MidiLibre","@lanouvellerepublique","@lamontagne","@estrepublicain","@dna","@leRepublicainLorrain","@courrierpicard","@paris-normandie","@lunion","@varmatin","@corsematin","@lest-eclair","@presseocean",
+ "@BFMParis","@BFMLyon","@BFMMarseille","@BFMGrandLille","@BFMToulouse","@BFMAlsace","@BFMNiceCotedAzur","@BFMDICI","@BFMNormandie","@BFMBordeaux","@BFMGrandLittoral","@BFMRegions",
+ "@France3Regions","@france3paris","@france3hautsdefrance","@france3bretagne","@france3occitanie","@france3aura","@France3PACA","@france3grandest","@france3nouvelleaquitaine","@france3normandie","@France3PaysdelaLoire","@france3centre","@france3bfc","@france3corse","@icifrancebleu","@ici"];
+async function api(path,params){
+  const r=await fetch(`https://www.googleapis.com/youtube/v3/${path}?`+new URLSearchParams({key:getKey(),...params})); const j=await r.json();
+  if(j.error){const reason=(j.error.errors&&j.error.errors[0]&&j.error.errors[0].reason)||""; const e=new Error(/quota/i.test(reason+j.error.message)?"Quota YouTube du jour épuisé (il revient vers 9h).":"YouTube : "+j.error.message);
+    e.fatal=/quota|key|forbidden/i.test(reason+j.error.message); e.keyErr=/key/i.test(j.error.message+reason)&&!/quota/i.test(reason); throw e}
+  return j;
+}
+async function pool(items,n,fn){let k=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(k<items.length){const it=items[k++];await fn(it)}}))}
+async function channels(){
+  const m=store.get("rv:ch")||{}; const missing=HANDLES.filter(h=>!(h in m));
+  if(missing.length){ setStatus("Recherche des médias…");
+    await pool(missing,6,async h=>{ try{const j=await api("channels",{part:"contentDetails,snippet",forHandle:h}); const it=j.items&&j.items[0];
+      m[h]=it?{u:it.contentDetails.relatedPlaylists.uploads,n:it.snippet.title}:null}catch(e){ if(e.fatal) throw e } });
+    store.set("rv:ch",m) }
+  const seen=new Set(); return Object.values(m).filter(c=>c&&!seen.has(c.u)&&seen.add(c.u));
+}
+async function fetchDay(){
+  const key=`rv5:${S.date}`, hit=store.get(key), fresh=daysAgo(S.date)===0?15*60e3:7*864e5;
+  if(hit && Date.now()-hit.t<fresh) return hit.v;
+  const chans=await channels(); const start=+parse(S.date), end=+parse(addDays(S.date,1)); const maxPages=3+Math.min(daysAgo(S.date),7)*2;
+  const seen=new Map(); let done=0;
+  await pool(chans,6,async ch=>{ let token="";
+    try{ for(let p=0;p<maxPages;p++){
+      const j=await api("playlistItems",{part:"snippet,contentDetails",playlistId:ch.u,maxResults:"50",...(token?{pageToken:token}:{})});
+      let older=false;
+      for(const it of j.items||[]){ const sn=it.snippet||{}, id=(it.contentDetails||{}).videoId; if(!id||/^(Private|Deleted) video$/.test(sn.title)) continue;
+        const t=Date.parse(it.contentDetails.videoPublishedAt||sn.publishedAt); if(t<start){older=true;continue} if(t>=end||seen.has(id)) continue;
+        seen.set(id,{id,title:decode(sn.title),desc:decode(sn.description||"").slice(0,600),channel:ch.n,ts:t,
+          thumb:((sn.thumbnails||{}).medium||(sn.thumbnails||{}).default||{}).url||`https://i.ytimg.com/vi/${id}/mqdefault.jpg`,live:false,city:-1}) }
+      token=j.nextPageToken; if(older||!token) break } }catch(e){ if(e.fatal) throw e }
+    setStatus(`Chargement… ${++done}/${chans.length} médias`) });
+  const ids=[...seen.keys()];
+  await pool(Array.from({length:Math.ceil(ids.length/50)},(_,k)=>ids.slice(k*50,k*50+50)),4,async chunk=>{
+    try{const j=await api("videos",{part:"snippet,recordingDetails,contentDetails",id:chunk.join(",")});
+      (j.items||[]).forEach(it=>{const v=seen.get(it.id); if(!v) return; const sn=it.snippet||{};
+        v.tags=(sn.tags||[]).slice(0,25).join(" , "); v.live=sn.liveBroadcastContent==="live"; v.dur=isoDur((it.contentDetails||{}).duration);
+        const loc=it.recordingDetails&&it.recordingDetails.location; if(loc&&loc.latitude!=null){v.lat=loc.latitude;v.lng=loc.longitude}})}catch{} });
+  const v=[...seen.values()].filter(x=>!JUNK.test(x.title)).sort((a,b)=>b.ts-a.ts);
+  store.set(key,{t:Date.now(),v}); return v;
+}
 async function load(){
   S.city=null; S.text=null; renderHeader();
   if(!getKey()){ $("keyCard").hidden=false; setStatus(""); $("list").innerHTML=""; bubbles.clearLayers(); return }
-  const [,queries,pages]=THEMES[S.theme]; const id=++S.req;
+  const id=++S.req;
   setStatus("Chargement des vidéos du jour…"); $("list").innerHTML=""; $("actions").innerHTML="";
   try{
-    const v=await fetchSet(`rv4:${S.date}:${S.theme}`,queries,pages);
+    const v=await fetchDay();
     if(id!==S.req) return;
     S.videos=v.map(locate); drawBubbles(); show(null);
   }catch(e){ if(id===S.req){ setStatus(e.message,true); if(e.keyErr) $("keyCard").hidden=false } }
@@ -343,7 +388,7 @@ function drawBubbles(){
 
 /* ---------- panneau ---------- */
 THEMES.forEach(([lab],i)=>{const b=document.createElement("button");b.className="chip";b.textContent=lab;b.id="th"+i;
-  b.onclick=()=>{S.theme=i;load()};$("themes").appendChild(b)});
+  b.onclick=()=>{S.theme=i;renderHeader(); if(S.videos.length){drawBubbles();show(null)} else load()};$("themes").appendChild(b)});
 $("dateInput").max=today();
 $("dateInput").onchange=()=>{const v=$("dateInput").value; if(v){S.date=v>today()?today():v;load()}};
 $("prev").onclick=()=>{S.date=addDays(S.date,-1);load()};
@@ -351,7 +396,7 @@ $("next").onclick=()=>{if(S.date<today()){S.date=addDays(S.date,1);load()}};
 const DURS=[["Toutes durées",1e9],["Moins de 20 min",1200],["Moins de 5 min",300]]; S.maxDur=1200;
 DURS.forEach(([lab,v])=>{const b=document.createElement("button");b.className="chip";b.textContent=lab;b.dataset.v=v;
   b.onclick=()=>{S.maxDur=v; if(S.videos.length){drawBubbles();show(S.city)} renderHeader()};$("durs").appendChild(b)});
-const okDur=v=>v.live||!v.dur||v.dur<=S.maxDur;
+const okDur=v=>(v.live||!v.dur||v.dur<=S.maxDur)&&(!THEMES[S.theme][1]||THEMES[S.theme][1].test(v.title+" "+(v.tags||"")+" "+v.desc.slice(0,300)));
 function renderHeader(){
   document.querySelectorAll("#durs .chip").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.v===S.maxDur));
   const ago=daysAgo(S.date);
@@ -428,7 +473,7 @@ async function moreForCity(ci){
   }catch(e){ if(id===S.req) setStatus(e.message,true) }
 }
 function selectCity(ci,fly){ S.text=null; if(fly) map.setView([COMMUNES[ci][1],COMMUNES[ci][2]],Math.max(map.getZoom(),11)); show(ci);
-  if(!S.videos.some(v=>v.city===ci)) moreForCity(ci) }
+  if(fly && !S.videos.some(v=>v.city===ci)) moreForCity(ci) }
 
 /* ---------- mode cinéma ---------- */
 const T={list:[],i:0,tab:"all",auto:true,player:null,ready:false,pending:null};
