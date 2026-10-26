@@ -340,7 +340,6 @@ function show(cityIdx){
     b.onclick=()=>moreForCity(cityIdx);
     const a=document.createElement("button");a.className="btn";a.textContent="← Toute la France";a.onclick=()=>{S.text=null;show(null)};
     $("actions").append(a,b);
-    $("actions").append(socialBar(COMMUNES[cityIdx]));
   }
   renderList(list);
 }
